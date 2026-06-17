@@ -116,6 +116,28 @@ uv run psfbench detect \
   --no-gui
 ```
 
+## Batch Detect Command
+
+Run detection for every condition directory immediately under an input root:
+
+```bash
+uv run psfbench batch-detect \
+  --input-root ../260616_psf \
+  --output-dir outputs \
+  --metadata-source thorimage \
+  --n-beads 20
+```
+
+This writes one CSV per condition:
+
+```text
+outputs/D40per_pow2.24per_points.csv
+outputs/D60per_pow1.98per_points.csv
+...
+```
+
+`batch-detect` defaults to `--no-gui`. To open napari for each stack in sequence, add `--gui`.
+
 ## Edit Command
 
 Load an existing points CSV, correct it in napari, and save a new CSV:

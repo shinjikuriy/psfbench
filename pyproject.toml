@@ -1,0 +1,30 @@
+[project]
+name = "psfbench"
+version = "0.1.0"
+description = "PSF bead candidate detection and napari correction for 3D TIFF stacks."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "napari[all]>=0.5.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scipy>=1.10",
+    "tifffile>=2023.7.10",
+    "typer>=0.12",
+]
+
+[project.scripts]
+psfbench = "psfbench.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-p", "no:napari"]

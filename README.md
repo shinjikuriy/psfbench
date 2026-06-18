@@ -151,6 +151,30 @@ uv run psfbench edit \
   --z-um-per-px 0.2
 ```
 
+## Crop ROIs Command
+
+After point correction, crop one 3D ROI around each bead center:
+
+```bash
+uv run psfbench crop-rois \
+  --input ../260616_psf/D100per_pow5.18per \
+  --points outputs/D100per_pow5.18per_points_corrected.csv \
+  --output-dir outputs/D100per_pow5.18per_rois \
+  --metadata-source thorimage \
+  --radius-z-um 3.0 \
+  --radius-xy-um 3.0
+```
+
+This writes ROI TIFF files and a manifest:
+
+```text
+outputs/D100per_pow5.18per_rois/bead_0001.tif
+outputs/D100per_pow5.18per_rois/bead_0002.tif
+outputs/D100per_pow5.18per_rois/roi_manifest.csv
+```
+
+ROIs that would extend beyond the stack bounds are skipped and recorded in `roi_manifest.csv`.
+
 ## Editing Points In Napari
 
 When napari opens, the TIFF stack is shown together with a `bead candidates` points layer.

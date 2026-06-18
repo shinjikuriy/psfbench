@@ -82,6 +82,41 @@ def test_batch_detect_processes_condition_directories(tmp_path: Path) -> None:
     assert len(pd.read_csv(output_b)) == 1
 
 
+def test_crop_rois_command_writes_roi_outputs(tmp_path: Path) -> None:
+    input_dir = tmp_path / "thorimage_stack"
+    input_dir.mkdir()
+    write_tiny_thorimage_stack(input_dir, peak_yx=(40, 40))
+    points_csv = tmp_path / "points.csv"
+    points_csv.write_text("z,y,x,z_um,y_um,x_um\n20,40,40,10,8,8\n")
+    output_dir = tmp_path / "rois"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "crop-rois",
+            "--input",
+            str(input_dir),
+            "--points",
+            str(points_csv),
+            "--output-dir",
+            str(output_dir),
+            "--metadata-source",
+            "thorimage",
+            "--radius-z-um",
+            "1.0",
+            "--radius-xy-um",
+            "0.6",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (output_dir / "bead_0001.tif").exists()
+    assert (output_dir / "roi_manifest.csv").exists()
+    manifest = pd.read_csv(output_dir / "roi_manifest.csv")
+    assert len(manifest) == 1
+    assert not bool(manifest.loc[0, "skipped"])
+
+
 def write_tiny_thorimage_stack(directory: Path, *, peak_yx: tuple[int, int]) -> None:
     (directory / "Experiment.xml").write_text(
         """<?xml version="1.0"?>

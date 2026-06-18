@@ -9,6 +9,7 @@ from psfbench.detection import DetectionParams, detect_beads
 from psfbench.gui import edit_points_with_napari
 from psfbench.io import read_tiff_stack
 from psfbench.metadata import MetadataSource, VoxelSize, resolve_voxel_size
+from psfbench.roi import save_rois
 
 
 app = typer.Typer(help="Detect and manually correct PSF bead centers in 3D TIFF stacks.")
@@ -186,6 +187,47 @@ def edit(
         xy_um_per_px=voxel_size.xy_um_per_px,
     )
     typer.echo(f"Saved {len(corrected_points)} points to {output}")
+
+
+@app.command("crop-rois")
+def crop_rois(
+    input: Path = typer.Option(..., "--input", "-i", help="Input 3D TIFF stack file or directory of 2D TIFF planes."),
+    points: Path = typer.Option(..., "--points", "-p", help="Corrected points CSV."),
+    output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Directory for ROI TIFF files and manifest."),
+    xy_um_per_px: float | None = typer.Option(None, help="XY pixel size in micrometers per pixel."),
+    z_um_per_px: float | None = typer.Option(None, help="Z step size in micrometers per pixel."),
+    metadata_source: MetadataSource = typer.Option(
+        MetadataSource.NONE,
+        help="Metadata source used to fill missing voxel size values.",
+    ),
+    radius_z_um: float = typer.Option(3.0, help="Half-size of each ROI in Z, in micrometers."),
+    radius_xy_um: float = typer.Option(3.0, help="Half-size of each ROI in X and Y, in micrometers."),
+    prefix: str = typer.Option("bead", help="Prefix for ROI TIFF filenames."),
+) -> None:
+    voxel_size = _resolve_voxel_size_or_exit(
+        input_path=input,
+        metadata_source=metadata_source,
+        xy_um_per_px=xy_um_per_px,
+        z_um_per_px=z_um_per_px,
+    )
+    stack = read_tiff_stack(input)
+    point_array = read_points_csv(points)
+    results = save_rois(
+        stack,
+        point_array,
+        output_dir=output_dir,
+        z_um_per_px=voxel_size.z_um_per_px,
+        xy_um_per_px=voxel_size.xy_um_per_px,
+        radius_z_um=radius_z_um,
+        radius_xy_um=radius_xy_um,
+        prefix=prefix,
+    )
+    saved = sum(not result.skipped for result in results)
+    skipped = len(results) - saved
+    typer.echo(
+        f"Saved {saved} ROI TIFF files to {output_dir} "
+        f"({skipped} skipped; manifest: {output_dir / 'roi_manifest.csv'})"
+    )
 
 
 def _resolve_voxel_size_or_exit(

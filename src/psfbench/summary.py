@@ -23,6 +23,7 @@ def summarize_measurement_files(
     output: str | Path,
     pattern: str = "*_measurements.csv",
     condition_suffix: str = "_measurements",
+    condition_metadata: str | Path | None = None,
     measurement_columns: list[str] | None = None,
 ) -> pd.DataFrame:
     input_dir = Path(input_dir)
@@ -35,6 +36,8 @@ def summarize_measurement_files(
         combined,
         measurement_columns=measurement_columns or DEFAULT_MEASUREMENT_COLUMNS,
     )
+    if condition_metadata is not None:
+        summary = join_condition_metadata(summary, condition_metadata)
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     summary.to_csv(output_path, index=False)
@@ -80,3 +83,22 @@ def summarize_measurements(
             row[f"{column}_sem"] = float(values.std(ddof=1) / np.sqrt(count)) if count > 1 else np.nan
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def join_condition_metadata(summary: pd.DataFrame, metadata_path: str | Path) -> pd.DataFrame:
+    if "condition" not in summary.columns:
+        raise ValueError("Summary must include a condition column.")
+
+    metadata = pd.read_csv(metadata_path)
+    if "condition" not in metadata.columns:
+        raise ValueError("Condition metadata CSV must include a condition column.")
+    if metadata["condition"].duplicated().any():
+        duplicated = sorted(metadata.loc[metadata["condition"].duplicated(), "condition"].astype(str).unique())
+        raise ValueError(f"Condition metadata contains duplicate condition values: {duplicated}")
+
+    metadata_columns = [column for column in metadata.columns if column != "condition"]
+    overlapping = [column for column in metadata_columns if column in summary.columns]
+    if overlapping:
+        raise ValueError(f"Condition metadata columns overlap summary columns: {overlapping}")
+
+    return summary.merge(metadata, on="condition", how="left")

@@ -171,6 +171,14 @@ def test_aggregate_measurements_command_writes_summary_csv(tmp_path: Path) -> No
             "integrated_intensity": [1000.0, 3000.0],
         }
     ).to_csv(input_dir / "condition_a_measurements.csv", index=False)
+    metadata = tmp_path / "condition_metadata.csv"
+    pd.DataFrame(
+        {
+            "condition": ["condition_a"],
+            "filling_rate": [40.0],
+            "power_percent": [2.24],
+        }
+    ).to_csv(metadata, index=False)
     output = tmp_path / "summary.csv"
 
     result = CliRunner().invoke(
@@ -181,6 +189,8 @@ def test_aggregate_measurements_command_writes_summary_csv(tmp_path: Path) -> No
             str(input_dir),
             "--output",
             str(output),
+            "--condition-metadata",
+            str(metadata),
         ],
     )
 
@@ -188,6 +198,7 @@ def test_aggregate_measurements_command_writes_summary_csv(tmp_path: Path) -> No
     summary = pd.read_csv(output)
     assert len(summary) == 1
     assert summary.loc[0, "condition"] == "condition_a"
+    assert summary.loc[0, "filling_rate"] == 40.0
     assert summary.loc[0, "FWHM_X_um_mean"] == 2.0
 
 

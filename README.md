@@ -211,6 +211,24 @@ By default, the command reads files matching `*_measurements.csv`. The condition
 
 The summary includes count, mean, SD, and SEM for each measurement column.
 
+You can optionally join experiment-level condition metadata:
+
+```bash
+uv run psfbench aggregate-measurements \
+  --input-dir outputs \
+  --output outputs/psf_summary.csv \
+  --condition-metadata condition_metadata.csv
+```
+
+The metadata CSV must include a `condition` column. Other columns are copied into the summary:
+
+```csv
+condition,filling_rate,power_percent
+D40per_pow2.24per,40,2.24
+D60per_pow1.98per,60,1.98
+D64.7per_pow3.0per,64.7,3.0
+```
+
 ## Editing Points In Napari
 
 When napari opens, the TIFF stack is shown together with a `bead candidates` points layer.

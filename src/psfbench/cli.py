@@ -252,13 +252,18 @@ def aggregate_measurements(
     output: Path = typer.Option(..., "--output", "-o", help="Output summary CSV path."),
     pattern: str = typer.Option("*_measurements.csv", help="Glob pattern for measurement CSV files."),
     condition_suffix: str = typer.Option("_measurements", help="Suffix removed from each measurement filename to infer condition."),
+    condition_metadata: Path | None = typer.Option(None, "--condition-metadata", help="Optional CSV joined by the condition column."),
 ) -> None:
-    summary = summarize_measurement_files(
-        input_dir,
-        output=output,
-        pattern=pattern,
-        condition_suffix=condition_suffix,
-    )
+    try:
+        summary = summarize_measurement_files(
+            input_dir,
+            output=output,
+            pattern=pattern,
+            condition_suffix=condition_suffix,
+            condition_metadata=condition_metadata,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     typer.echo(f"Saved summary for {len(summary)} conditions to {output}")
 
 

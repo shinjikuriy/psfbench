@@ -73,3 +73,5 @@ def test_save_rois_writes_tiffs_and_manifest(tmp_path) -> None:
     assert manifest.loc[0, "z_um"] == 2.5
     assert manifest.loc[0, "y_um"] == 2.0
     assert manifest.loc[0, "x_um"] == 3.0
+    assert manifest.loc[0, "z_um_per_px"] == 0.5
+    assert manifest.loc[0, "xy_um_per_px"] == 0.2

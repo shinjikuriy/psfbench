@@ -117,6 +117,46 @@ def test_crop_rois_command_writes_roi_outputs(tmp_path: Path) -> None:
     assert not bool(manifest.loc[0, "skipped"])
 
 
+def test_measure_rois_command_writes_measurement_csv(tmp_path: Path) -> None:
+    roi_dir = tmp_path / "rois"
+    roi_dir.mkdir()
+    roi = np.zeros((7, 7, 7), dtype=np.uint16)
+    roi[:, 3, 3] = [0, 2, 4, 8, 4, 2, 0]
+    roi[3, :, 3] = [0, 2, 4, 8, 4, 2, 0]
+    roi[3, 3, :] = [0, 2, 4, 8, 4, 2, 0]
+    tifffile.imwrite(roi_dir / "bead_0001.tif", roi)
+    pd.DataFrame(
+        [
+            {
+                "bead_index": 1,
+                "roi_path": "bead_0001.tif",
+                "skipped": False,
+                "z_um_per_px": 0.5,
+                "xy_um_per_px": 0.2,
+            }
+        ]
+    ).to_csv(roi_dir / "roi_manifest.csv", index=False)
+    output = tmp_path / "measurements.csv"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "measure-rois",
+            "--roi-dir",
+            str(roi_dir),
+            "--output",
+            str(output),
+            "--background-percentile",
+            "0",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    measurements = pd.read_csv(output)
+    assert len(measurements) == 1
+    assert measurements.loc[0, "FWHM_Z_um"] == 1.0
+
+
 def write_tiny_thorimage_stack(directory: Path, *, peak_yx: tuple[int, int]) -> None:
     (directory / "Experiment.xml").write_text(
         """<?xml version="1.0"?>

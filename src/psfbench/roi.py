@@ -175,6 +175,8 @@ def write_roi_manifest(
                 "radius_xy_um": radius_xy_um,
                 "radius_z_px": radius_z_px,
                 "radius_xy_px": radius_xy_px,
+                "z_um_per_px": z_um_per_px,
+                "xy_um_per_px": xy_um_per_px,
                 "roi_path": str(result.roi_path) if result.roi_path else "",
                 "skipped": result.skipped,
                 "skip_reason": result.skip_reason or "",

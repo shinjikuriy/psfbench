@@ -175,6 +175,28 @@ outputs/D100per_pow5.18per_rois/roi_manifest.csv
 
 ROIs that would extend beyond the stack bounds are skipped and recorded in `roi_manifest.csv`.
 
+## Measure ROIs Command
+
+Measure each saved ROI with a simple peak-centered line-profile FWHM estimate:
+
+```bash
+uv run psfbench measure-rois \
+  --roi-dir outputs/D100per_pow5.18per_rois \
+  --output outputs/D100per_pow5.18per_measurements.csv
+```
+
+The current measurement is a first-pass implementation. It subtracts a low-percentile ROI background, finds the ROI peak, extracts X/Y/Z line profiles through that peak, and estimates FWHM by linear interpolation at half maximum.
+
+The output CSV includes:
+
+- `FWHM_X_um`
+- `FWHM_Y_um`
+- `FWHM_Z_um`
+- `FWHM_XY_mean_um`
+- `FWHM_X_over_Y`
+- `peak_intensity`
+- `integrated_intensity`
+
 ## Editing Points In Napari
 
 When napari opens, the TIFF stack is shown together with a `bead candidates` points layer.

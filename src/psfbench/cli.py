@@ -8,6 +8,7 @@ from psfbench.coordinates import read_points_csv, write_points_csv
 from psfbench.detection import DetectionParams, detect_beads
 from psfbench.gui import edit_points_with_napari
 from psfbench.io import read_tiff_stack
+from psfbench.measurement import measure_rois_from_manifest
 from psfbench.metadata import MetadataSource, VoxelSize, resolve_voxel_size
 from psfbench.roi import save_rois
 
@@ -228,6 +229,20 @@ def crop_rois(
         f"Saved {saved} ROI TIFF files to {output_dir} "
         f"({skipped} skipped; manifest: {output_dir / 'roi_manifest.csv'})"
     )
+
+
+@app.command("measure-rois")
+def measure_rois(
+    roi_dir: Path = typer.Option(..., "--roi-dir", "-r", help="Directory containing ROI TIFF files and roi_manifest.csv."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output measurement CSV path."),
+    background_percentile: float = typer.Option(10.0, help="Low percentile used as ROI background."),
+) -> None:
+    measurements = measure_rois_from_manifest(
+        roi_dir,
+        output=output,
+        background_percentile=background_percentile,
+    )
+    typer.echo(f"Saved {len(measurements)} ROI measurements to {output}")
 
 
 def _resolve_voxel_size_or_exit(

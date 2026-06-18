@@ -11,6 +11,7 @@ from psfbench.io import read_tiff_stack
 from psfbench.measurement import measure_rois_from_manifest
 from psfbench.metadata import MetadataSource, VoxelSize, resolve_voxel_size
 from psfbench.roi import save_rois
+from psfbench.summary import summarize_measurement_files
 
 
 app = typer.Typer(help="Detect and manually correct PSF bead centers in 3D TIFF stacks.")
@@ -243,6 +244,22 @@ def measure_rois(
         background_percentile=background_percentile,
     )
     typer.echo(f"Saved {len(measurements)} ROI measurements to {output}")
+
+
+@app.command("aggregate-measurements")
+def aggregate_measurements(
+    input_dir: Path = typer.Option(..., "--input-dir", "-i", help="Directory containing measurement CSV files."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output summary CSV path."),
+    pattern: str = typer.Option("*_measurements.csv", help="Glob pattern for measurement CSV files."),
+    condition_suffix: str = typer.Option("_measurements", help="Suffix removed from each measurement filename to infer condition."),
+) -> None:
+    summary = summarize_measurement_files(
+        input_dir,
+        output=output,
+        pattern=pattern,
+        condition_suffix=condition_suffix,
+    )
+    typer.echo(f"Saved summary for {len(summary)} conditions to {output}")
 
 
 def _resolve_voxel_size_or_exit(

@@ -157,6 +157,40 @@ def test_measure_rois_command_writes_measurement_csv(tmp_path: Path) -> None:
     assert measurements.loc[0, "FWHM_Z_um"] == 1.0
 
 
+def test_aggregate_measurements_command_writes_summary_csv(tmp_path: Path) -> None:
+    input_dir = tmp_path / "measurements"
+    input_dir.mkdir()
+    pd.DataFrame(
+        {
+            "FWHM_X_um": [1.0, 3.0],
+            "FWHM_Y_um": [2.0, 4.0],
+            "FWHM_Z_um": [5.0, 7.0],
+            "FWHM_XY_mean_um": [1.5, 3.5],
+            "FWHM_X_over_Y": [0.5, 0.75],
+            "peak_intensity": [100.0, 300.0],
+            "integrated_intensity": [1000.0, 3000.0],
+        }
+    ).to_csv(input_dir / "condition_a_measurements.csv", index=False)
+    output = tmp_path / "summary.csv"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "aggregate-measurements",
+            "--input-dir",
+            str(input_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    summary = pd.read_csv(output)
+    assert len(summary) == 1
+    assert summary.loc[0, "condition"] == "condition_a"
+    assert summary.loc[0, "FWHM_X_um_mean"] == 2.0
+
+
 def write_tiny_thorimage_stack(directory: Path, *, peak_yx: tuple[int, int]) -> None:
     (directory / "Experiment.xml").write_text(
         """<?xml version="1.0"?>

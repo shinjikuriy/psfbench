@@ -197,6 +197,20 @@ The output CSV includes:
 - `peak_intensity`
 - `integrated_intensity`
 
+## Aggregate Measurements Command
+
+Summarize multiple measurement CSV files by condition:
+
+```bash
+uv run psfbench aggregate-measurements \
+  --input-dir outputs \
+  --output outputs/psf_summary.csv
+```
+
+By default, the command reads files matching `*_measurements.csv`. The condition name is inferred from the filename by removing `_measurements`.
+
+The summary includes count, mean, SD, and SEM for each measurement column.
+
 ## Editing Points In Napari
 
 When napari opens, the TIFF stack is shown together with a `bead candidates` points layer.

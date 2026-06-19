@@ -10,6 +10,7 @@ from psfbench.gui import edit_points_with_napari
 from psfbench.io import read_tiff_stack
 from psfbench.measurement import measure_rois_from_manifest
 from psfbench.metadata import MetadataSource, VoxelSize, resolve_voxel_size
+from psfbench.plotting import plot_summary
 from psfbench.roi import save_rois
 from psfbench.summary import summarize_measurement_files
 
@@ -265,6 +266,33 @@ def aggregate_measurements(
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     typer.echo(f"Saved summary for {len(summary)} conditions to {output}")
+
+
+@app.command("plot-summary")
+def plot_summary_command(
+    summary: Path = typer.Option(..., "--summary", "-s", help="Input summary CSV path."),
+    output: Path = typer.Option(..., "--output", "-o", help="Output plot path, such as PNG, PDF, or SVG."),
+    x: str = typer.Option(..., "--x", help="Summary column used for the x-axis."),
+    y: str = typer.Option(..., "--y", help="Summary column used for the y-axis."),
+    yerr: str | None = typer.Option(None, "--yerr", help="Optional summary column used for y error bars."),
+    title: str | None = typer.Option(None, "--title", help="Optional plot title."),
+    x_label: str | None = typer.Option(None, "--x-label", help="Optional x-axis label."),
+    y_label: str | None = typer.Option(None, "--y-label", help="Optional y-axis label."),
+) -> None:
+    try:
+        plot_summary(
+            summary,
+            output=output,
+            x=x,
+            y=y,
+            yerr=yerr,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Saved plot to {output}")
 
 
 def _resolve_voxel_size_or_exit(

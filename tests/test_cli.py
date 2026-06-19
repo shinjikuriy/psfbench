@@ -202,6 +202,39 @@ def test_aggregate_measurements_command_writes_summary_csv(tmp_path: Path) -> No
     assert summary.loc[0, "FWHM_X_um_mean"] == 2.0
 
 
+def test_plot_summary_command_writes_image(tmp_path: Path) -> None:
+    summary = tmp_path / "summary.csv"
+    output = tmp_path / "plot.png"
+    pd.DataFrame(
+        {
+            "condition": ["condition_a", "condition_b"],
+            "FWHM_Z_um_mean": [1.2, 1.4],
+            "FWHM_Z_um_sem": [0.05, 0.07],
+        }
+    ).to_csv(summary, index=False)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "plot-summary",
+            "--summary",
+            str(summary),
+            "--output",
+            str(output),
+            "--x",
+            "condition",
+            "--y",
+            "FWHM_Z_um_mean",
+            "--yerr",
+            "FWHM_Z_um_sem",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert output.exists()
+    assert output.stat().st_size > 0
+
+
 def write_tiny_thorimage_stack(directory: Path, *, peak_yx: tuple[int, int]) -> None:
     (directory / "Experiment.xml").write_text(
         """<?xml version="1.0"?>

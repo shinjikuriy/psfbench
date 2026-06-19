@@ -229,6 +229,32 @@ D60per_pow1.98per,60,1.98
 D64.7per_pow3.0per,64.7,3.0
 ```
 
+## Plot Summary Command
+
+Plot any columns from a summary CSV:
+
+```bash
+uv run psfbench plot-summary \
+  --summary outputs/psf_summary.csv \
+  --x filling_rate \
+  --y FWHM_Z_um_mean \
+  --yerr FWHM_Z_um_sem \
+  --output outputs/fwhm_z_vs_filling_rate.png
+```
+
+Without condition metadata, plot by condition label:
+
+```bash
+uv run psfbench plot-summary \
+  --summary outputs/psf_summary.csv \
+  --x condition \
+  --y FWHM_Z_um_mean \
+  --yerr FWHM_Z_um_sem \
+  --output outputs/fwhm_z_by_condition.png
+```
+
+The output extension controls the file type, for example `.png`, `.pdf`, or `.svg`.
+
 ## Editing Points In Napari
 
 When napari opens, the TIFF stack is shown together with a `bead candidates` points layer.

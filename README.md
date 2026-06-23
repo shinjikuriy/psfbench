@@ -236,8 +236,11 @@ The output CSV includes:
 - `FWHM_XY_mean_line_um`
 - `FWHM_X_over_Y_line`
 - Gaussian fit status and quality columns such as `gaussian_x_success`, `gaussian_x_sigma_um`, and `gaussian_x_r_squared`
+- QC columns such as `qc_any_warning`, `qc_fit_failed`, `qc_peak_near_roi_edge`, `qc_low_r_squared`, and `line_gaussian_rel_diff_x`
 - `peak_intensity`
 - `integrated_intensity`
+
+QC columns are diagnostic flags only. They do not exclude beads from the output CSV.
 
 ## Aggregate Measurements Command
 

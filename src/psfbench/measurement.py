@@ -10,6 +10,13 @@ import tifffile
 
 
 _GAUSSIAN_FWHM_FACTOR = 2.3548200450309493
+_QC_EDGE_MARGIN_PX = 1
+_QC_CENTER_OFFSET_PX = 2.0
+_QC_LOW_R_SQUARED = 0.9
+_QC_LOW_SIGNAL_TO_BACKGROUND = 3.0
+_QC_LINE_GAUSSIAN_REL_DIFF = 0.25
+_QC_FIT_BOUND_FRACTION = 0.95
+_QC_FIT_BOUND_TOLERANCE = 1.05
 
 
 @dataclass(frozen=True)
@@ -52,6 +59,25 @@ class GaussianFwhmResult:
 
 
 @dataclass(frozen=True)
+class MeasurementQuality:
+    signal_to_background: float
+    peak_margin_z_px: int
+    peak_margin_y_px: int
+    peak_margin_x_px: int
+    line_gaussian_rel_diff_z: float
+    line_gaussian_rel_diff_y: float
+    line_gaussian_rel_diff_x: float
+    qc_fit_failed: bool
+    qc_low_r_squared: bool
+    qc_peak_near_roi_edge: bool
+    qc_gaussian_center_far: bool
+    qc_sigma_near_fit_bounds: bool
+    qc_low_signal_to_background: bool
+    qc_line_gaussian_mismatch: bool
+    qc_any_warning: bool
+
+
+@dataclass(frozen=True)
 class RoiMeasurement:
     bead_index: int
     roi_path: Path
@@ -69,6 +95,7 @@ class RoiMeasurement:
     fwhm_xy_mean_line_um: float
     fwhm_x_over_y_line: float
     gaussian_fwhm: GaussianFwhmResult
+    quality: MeasurementQuality
     peak_intensity: float
     integrated_intensity: float
     background: float
@@ -239,6 +266,110 @@ def _failed_gaussian_fit(reason: str) -> GaussianFitResult:
     )
 
 
+def evaluate_measurement_quality(
+    *,
+    roi_shape: tuple[int, int, int],
+    peak_zyx: tuple[int, int, int],
+    profiles: RoiProfiles,
+    gaussian_fwhm: GaussianFwhmResult,
+    fwhm_z_line_um: float,
+    fwhm_y_line_um: float,
+    fwhm_x_line_um: float,
+    peak_signal: float,
+    background: float,
+) -> MeasurementQuality:
+    peak_z, peak_y, peak_x = peak_zyx
+    z_size, y_size, x_size = roi_shape
+    peak_margin_z_px = min(peak_z, z_size - 1 - peak_z)
+    peak_margin_y_px = min(peak_y, y_size - 1 - peak_y)
+    peak_margin_x_px = min(peak_x, x_size - 1 - peak_x)
+
+    signal_to_background = _signal_to_background(peak_signal=peak_signal, background=background)
+    line_gaussian_rel_diff_z = _relative_difference(fwhm_z_line_um, gaussian_fwhm.fwhm_z_um)
+    line_gaussian_rel_diff_y = _relative_difference(fwhm_y_line_um, gaussian_fwhm.fwhm_y_um)
+    line_gaussian_rel_diff_x = _relative_difference(fwhm_x_line_um, gaussian_fwhm.fwhm_x_um)
+
+    fits = [gaussian_fwhm.z_fit, gaussian_fwhm.y_fit, gaussian_fwhm.x_fit]
+    profile_fit_pairs = [
+        (profiles.z, gaussian_fwhm.z_fit),
+        (profiles.y, gaussian_fwhm.y_fit),
+        (profiles.x, gaussian_fwhm.x_fit),
+    ]
+
+    qc_fit_failed = not all(fit.success for fit in fits)
+    qc_low_r_squared = any(
+        fit.success and np.isfinite(fit.r_squared) and fit.r_squared < _QC_LOW_R_SQUARED for fit in fits
+    )
+    qc_peak_near_roi_edge = min(peak_margin_z_px, peak_margin_y_px, peak_margin_x_px) <= _QC_EDGE_MARGIN_PX
+    qc_gaussian_center_far = any(
+        fit.success and abs(fit.center_um) / profile.um_per_px > _QC_CENTER_OFFSET_PX
+        for profile, fit in profile_fit_pairs
+    )
+    qc_sigma_near_fit_bounds = any(
+        fit.success and _sigma_near_fit_bounds(profile, fit) for profile, fit in profile_fit_pairs
+    )
+    qc_low_signal_to_background = (
+        np.isfinite(signal_to_background) and signal_to_background < _QC_LOW_SIGNAL_TO_BACKGROUND
+    )
+    qc_line_gaussian_mismatch = any(
+        np.isfinite(value) and value > _QC_LINE_GAUSSIAN_REL_DIFF
+        for value in [line_gaussian_rel_diff_z, line_gaussian_rel_diff_y, line_gaussian_rel_diff_x]
+    )
+    qc_any_warning = any(
+        [
+            qc_fit_failed,
+            qc_low_r_squared,
+            qc_peak_near_roi_edge,
+            qc_gaussian_center_far,
+            qc_sigma_near_fit_bounds,
+            qc_low_signal_to_background,
+            qc_line_gaussian_mismatch,
+        ]
+    )
+
+    return MeasurementQuality(
+        signal_to_background=signal_to_background,
+        peak_margin_z_px=int(peak_margin_z_px),
+        peak_margin_y_px=int(peak_margin_y_px),
+        peak_margin_x_px=int(peak_margin_x_px),
+        line_gaussian_rel_diff_z=line_gaussian_rel_diff_z,
+        line_gaussian_rel_diff_y=line_gaussian_rel_diff_y,
+        line_gaussian_rel_diff_x=line_gaussian_rel_diff_x,
+        qc_fit_failed=qc_fit_failed,
+        qc_low_r_squared=qc_low_r_squared,
+        qc_peak_near_roi_edge=qc_peak_near_roi_edge,
+        qc_gaussian_center_far=qc_gaussian_center_far,
+        qc_sigma_near_fit_bounds=qc_sigma_near_fit_bounds,
+        qc_low_signal_to_background=qc_low_signal_to_background,
+        qc_line_gaussian_mismatch=qc_line_gaussian_mismatch,
+        qc_any_warning=qc_any_warning,
+    )
+
+
+def _signal_to_background(*, peak_signal: float, background: float) -> float:
+    if background > 0:
+        return float(peak_signal / background)
+    if peak_signal > 0:
+        return np.inf
+    return np.nan
+
+
+def _relative_difference(value: float, reference: float) -> float:
+    if not (np.isfinite(value) and np.isfinite(reference)) or reference == 0:
+        return np.nan
+    return float(abs(value - reference) / abs(reference))
+
+
+def _sigma_near_fit_bounds(profile: AxisProfile, fit: GaussianFitResult) -> bool:
+    span_um = float(np.max(profile.coordinates_um) - np.min(profile.coordinates_um))
+    lower_bound = profile.um_per_px / 10.0
+    upper_bound = max(span_um, profile.um_per_px)
+    return (
+        fit.sigma_um <= lower_bound * _QC_FIT_BOUND_TOLERANCE
+        or fit.sigma_um >= upper_bound * _QC_FIT_BOUND_FRACTION
+    )
+
+
 def measure_roi(
     roi: np.ndarray,
     *,
@@ -253,6 +384,7 @@ def measure_roi(
     background = float(np.percentile(roi_float, background_percentile))
     corrected = np.clip(roi_float - background, a_min=0, a_max=None)
     peak_z, peak_y, peak_x = np.unravel_index(int(np.argmax(corrected)), corrected.shape)
+    peak_signal = float(corrected[peak_z, peak_y, peak_x])
     peak_intensity = float(roi_float[peak_z, peak_y, peak_x])
     integrated_intensity = float(corrected.sum())
     profiles = extract_roi_profiles(
@@ -269,6 +401,17 @@ def measure_roi(
     fwhm_x_line_um = estimate_fwhm_from_profile(profiles.x.values, profiles.x.um_per_px)
     fwhm_xy_mean_line_um = _nanmean_or_nan([fwhm_x_line_um, fwhm_y_line_um])
     fwhm_x_over_y_line = float(fwhm_x_line_um / fwhm_y_line_um) if fwhm_y_line_um > 0 else np.nan
+    quality = evaluate_measurement_quality(
+        roi_shape=corrected.shape,
+        peak_zyx=(int(peak_z), int(peak_y), int(peak_x)),
+        profiles=profiles,
+        gaussian_fwhm=gaussian_fwhm,
+        fwhm_z_line_um=fwhm_z_line_um,
+        fwhm_y_line_um=fwhm_y_line_um,
+        fwhm_x_line_um=fwhm_x_line_um,
+        peak_signal=peak_signal,
+        background=background,
+    )
 
     return RoiMeasurement(
         bead_index=-1,
@@ -287,6 +430,7 @@ def measure_roi(
         fwhm_xy_mean_line_um=fwhm_xy_mean_line_um,
         fwhm_x_over_y_line=fwhm_x_over_y_line,
         gaussian_fwhm=gaussian_fwhm,
+        quality=quality,
         peak_intensity=peak_intensity,
         integrated_intensity=integrated_intensity,
         background=background,
@@ -381,6 +525,7 @@ def measure_rois_from_manifest(
         output_row.update(_gaussian_fit_columns("x", measurement.gaussian_fwhm.x_fit))
         output_row.update(_gaussian_fit_columns("y", measurement.gaussian_fwhm.y_fit))
         output_row.update(_gaussian_fit_columns("z", measurement.gaussian_fwhm.z_fit))
+        output_row.update(_quality_columns(measurement.quality))
         rows.append(output_row)
 
     df = pd.DataFrame(rows)
@@ -401,4 +546,24 @@ def _gaussian_fit_columns(axis: str, fit: GaussianFitResult) -> dict[str, float 
         f"{prefix}_rmse": fit.rmse,
         f"{prefix}_r_squared": fit.r_squared,
         f"{prefix}_failure_reason": fit.failure_reason,
+    }
+
+
+def _quality_columns(quality: MeasurementQuality) -> dict[str, float | int | bool]:
+    return {
+        "signal_to_background": quality.signal_to_background,
+        "peak_margin_z_px": quality.peak_margin_z_px,
+        "peak_margin_y_px": quality.peak_margin_y_px,
+        "peak_margin_x_px": quality.peak_margin_x_px,
+        "line_gaussian_rel_diff_z": quality.line_gaussian_rel_diff_z,
+        "line_gaussian_rel_diff_y": quality.line_gaussian_rel_diff_y,
+        "line_gaussian_rel_diff_x": quality.line_gaussian_rel_diff_x,
+        "qc_fit_failed": quality.qc_fit_failed,
+        "qc_low_r_squared": quality.qc_low_r_squared,
+        "qc_peak_near_roi_edge": quality.qc_peak_near_roi_edge,
+        "qc_gaussian_center_far": quality.qc_gaussian_center_far,
+        "qc_sigma_near_fit_bounds": quality.qc_sigma_near_fit_bounds,
+        "qc_low_signal_to_background": quality.qc_low_signal_to_background,
+        "qc_line_gaussian_mismatch": quality.qc_line_gaussian_mismatch,
+        "qc_any_warning": quality.qc_any_warning,
     }

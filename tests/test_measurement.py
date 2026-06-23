@@ -181,7 +181,25 @@ def test_measure_roi_reports_gaussian_and_line_profile_fwhm_and_intensity() -> N
     assert measurement.fwhm_z_line_um == pytest.approx(measurement.fwhm_z_um, rel=0.02)
     assert measurement.fwhm_y_line_um == pytest.approx(measurement.fwhm_y_um, rel=0.02)
     assert measurement.fwhm_x_line_um == pytest.approx(measurement.fwhm_x_um, rel=0.02)
+    assert not measurement.quality.qc_fit_failed
+    assert not measurement.quality.qc_low_r_squared
+    assert not measurement.quality.qc_peak_near_roi_edge
+    assert not measurement.quality.qc_gaussian_center_far
+    assert not measurement.quality.qc_line_gaussian_mismatch
+    assert not measurement.quality.qc_any_warning
     assert measurement.peak_intensity == 100
+
+
+def test_measure_roi_flags_peak_near_roi_edge() -> None:
+    roi = np.zeros((9, 9, 9), dtype=np.float32)
+    roi[1, 4, 4] = 10
+
+    measurement = measure_roi(roi, z_um_per_px=0.2, xy_um_per_px=0.1, background_percentile=0)
+
+    assert measurement.peak_z == 1
+    assert measurement.quality.peak_margin_z_px == 1
+    assert measurement.quality.qc_peak_near_roi_edge
+    assert measurement.quality.qc_any_warning
 
 
 def test_measure_rois_from_manifest_writes_measurement_csv(tmp_path) -> None:
@@ -218,3 +236,5 @@ def test_measure_rois_from_manifest_writes_measurement_csv(tmp_path) -> None:
     assert measurements.loc[0, "bead_index"] == 1
     assert measurements.loc[0, "FWHM_Z_line_um"] == pytest.approx(1.0)
     assert measurements.loc[0, "gaussian_z_success"]
+    assert "qc_any_warning" in measurements.columns
+    assert "signal_to_background" in measurements.columns

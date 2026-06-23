@@ -19,6 +19,18 @@ DEFAULT_MEASUREMENT_COLUMNS = [
     "FWHM_X_over_Y_line",
     "peak_intensity",
     "integrated_intensity",
+    "signal_to_background",
+    "line_gaussian_rel_diff_x",
+    "line_gaussian_rel_diff_y",
+    "line_gaussian_rel_diff_z",
+    "qc_fit_failed",
+    "qc_low_r_squared",
+    "qc_peak_near_roi_edge",
+    "qc_gaussian_center_far",
+    "qc_sigma_near_fit_bounds",
+    "qc_low_signal_to_background",
+    "qc_line_gaussian_mismatch",
+    "qc_any_warning",
 ]
 
 

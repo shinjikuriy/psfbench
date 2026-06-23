@@ -6,14 +6,14 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 
-class MetadataSource(str, Enum):
+class MetadataFormat(str, Enum):
     NONE = "none"
     THORIMAGE = "thorimage"
 
 
 @dataclass(frozen=True)
 class ImageMetadata:
-    source: MetadataSource
+    format: MetadataFormat
     path: Path
     xy_um_per_px: float | None = None
     z_um_per_px: float | None = None
@@ -34,28 +34,28 @@ class VoxelSize:
     metadata: ImageMetadata | None = None
 
 
-def read_metadata(input_path: str | Path, source: MetadataSource) -> ImageMetadata | None:
+def read_metadata(input_path: str | Path, metadata_format: MetadataFormat) -> ImageMetadata | None:
     input_path = Path(input_path)
-    if source == MetadataSource.NONE:
+    if metadata_format == MetadataFormat.NONE:
         return None
-    if source == MetadataSource.THORIMAGE:
+    if metadata_format == MetadataFormat.THORIMAGE:
         return read_thorimage_metadata(input_path)
-    raise ValueError(f"Unsupported metadata source: {source}")
+    raise ValueError(f"Unsupported metadata format: {metadata_format}")
 
 
 def read_thorimage_metadata(input_path: str | Path) -> ImageMetadata:
     input_path = Path(input_path)
     if not input_path.is_dir():
-        raise ValueError("--metadata-source thorimage requires --input to be a directory.")
+        raise ValueError("--metadata-format thorimage requires --input to be a directory.")
 
     xml_path = input_path / "Experiment.xml"
     if not xml_path.exists():
-        raise ValueError(f"--metadata-source thorimage was specified, but {xml_path} was not found.")
+        raise ValueError(f"--metadata-format thorimage was specified, but {xml_path} was not found.")
 
     root = ElementTree.parse(xml_path).getroot()
     if root.tag != "ThorImageExperiment":
         raise ValueError(
-            "--metadata-source thorimage was specified, but Experiment.xml root "
+            "--metadata-format thorimage was specified, but Experiment.xml root "
             f"was {root.tag!r}, not 'ThorImageExperiment'."
         )
 
@@ -80,7 +80,7 @@ def read_thorimage_metadata(input_path: str | Path) -> ImageMetadata:
         xy_um_per_px = pixel_size_um
 
     return ImageMetadata(
-        source=MetadataSource.THORIMAGE,
+        format=MetadataFormat.THORIMAGE,
         path=xml_path,
         xy_um_per_px=xy_um_per_px,
         z_um_per_px=z_um_per_px,
@@ -98,11 +98,11 @@ def read_thorimage_metadata(input_path: str | Path) -> ImageMetadata:
 def resolve_voxel_size(
     *,
     input_path: str | Path,
-    metadata_source: MetadataSource,
+    metadata_format: MetadataFormat,
     xy_um_per_px: float | None,
     z_um_per_px: float | None,
 ) -> VoxelSize:
-    metadata = read_metadata(input_path, metadata_source)
+    metadata = read_metadata(input_path, metadata_format)
 
     resolved_xy = xy_um_per_px
     resolved_z = z_um_per_px
@@ -116,7 +116,7 @@ def resolve_voxel_size(
     if resolved_z is None:
         missing.append("--z-um-per-px")
     if missing:
-        hint = " or specify --metadata-source thorimage" if metadata_source == MetadataSource.NONE else ""
+        hint = " or specify --metadata-format thorimage" if metadata_format == MetadataFormat.NONE else ""
         raise ValueError(f"Missing required voxel size option(s): {', '.join(missing)}{hint}.")
 
     return VoxelSize(

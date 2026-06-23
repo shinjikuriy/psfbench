@@ -39,10 +39,10 @@ For a single measurement dataset, run `psfbench` without a subcommand:
 uv run psfbench \
   --input ../260616_psf/D64.7per_pow3.0per \
   --output-dir outputs/D64.7per_pow3.0per \
-  --metadata-source thorimage
+  --metadata-format thorimage
 ```
 
-Metadata is not used unless explicitly requested. For ThorImage data, specify `--metadata-source thorimage`. After napari is closed, analysis continues automatically.
+Metadata is not used unless explicitly requested. For ThorImage data, specify `--metadata-format thorimage`. After napari is closed, analysis continues automatically.
 
 The output directory contains:
 
@@ -63,7 +63,7 @@ To run without napari:
 uv run psfbench \
   --input ../260616_psf/D64.7per_pow3.0per \
   --output-dir outputs/D64.7per_pow3.0per \
-  --metadata-source thorimage \
+  --metadata-format thorimage \
   --no-gui
 ```
 
@@ -97,7 +97,7 @@ The points layer also uses `(z, y, x)` pixel coordinate order.
 
 ## Metadata
 
-Metadata is not used by default. Specify a metadata source explicitly if you want `psfbench` to fill missing voxel size values from acquisition metadata.
+Metadata is not used by default. Specify a metadata format explicitly if you want `psfbench` to fill missing voxel size values from acquisition metadata.
 
 ThorImage directory input is supported:
 
@@ -105,7 +105,7 @@ ThorImage directory input is supported:
 uv run psfbench detect \
   --input ../260616_psf/D100per_pow5.18per \
   --output outputs/D100per_pow5.18per_points.csv \
-  --metadata-source thorimage
+  --metadata-format thorimage
 ```
 
 For ThorImage, `psfbench` expects `Experiment.xml` in the input directory and checks that the XML root is `ThorImageExperiment`.
@@ -122,7 +122,7 @@ CLI values always take precedence over metadata values. For example, this uses t
 uv run psfbench detect \
   --input ../260616_psf/D100per_pow5.18per \
   --output outputs/D100per_pow5.18per_points.csv \
-  --metadata-source thorimage \
+  --metadata-format thorimage \
   --xy-um-per-px 0.11646
 ```
 
@@ -160,7 +160,7 @@ Run detection for every condition directory immediately under an input root:
 uv run psfbench batch-detect \
   --input-root ../260616_psf \
   --output-dir outputs \
-  --metadata-source thorimage \
+  --metadata-format thorimage \
   --n-beads 20
 ```
 
@@ -196,7 +196,7 @@ uv run psfbench crop-rois \
   --input ../260616_psf/D100per_pow5.18per \
   --points outputs/D100per_pow5.18per_points_corrected.csv \
   --output-dir outputs/D100per_pow5.18per_rois \
-  --metadata-source thorimage \
+  --metadata-format thorimage \
   --radius-z-um 3.0 \
   --radius-xy-um 3.0
 ```

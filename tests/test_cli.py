@@ -23,7 +23,7 @@ def test_top_level_command_runs_one_shot_analysis(tmp_path: Path) -> None:
             str(input_dir),
             "--output-dir",
             str(output_dir),
-            "--metadata-source",
+            "--metadata-format",
             "thorimage",
             "--no-gui",
             "--n-beads",
@@ -52,7 +52,7 @@ def test_top_level_command_runs_one_shot_analysis(tmp_path: Path) -> None:
     assert summary.loc[0, "FWHM_Z_um_count"] == 1
 
 
-def test_detect_uses_thorimage_metadata_source(tmp_path: Path) -> None:
+def test_detect_uses_thorimage_metadata_format(tmp_path: Path) -> None:
     input_dir = tmp_path / "thorimage_stack"
     input_dir.mkdir()
     output = tmp_path / "points.csv"
@@ -66,7 +66,7 @@ def test_detect_uses_thorimage_metadata_source(tmp_path: Path) -> None:
             str(input_dir),
             "--output",
             str(output),
-            "--metadata-source",
+            "--metadata-format",
             "thorimage",
             "--n-beads",
             "1",
@@ -106,7 +106,7 @@ def test_batch_detect_processes_condition_directories(tmp_path: Path) -> None:
             str(input_root),
             "--output-dir",
             str(output_dir),
-            "--metadata-source",
+            "--metadata-format",
             "thorimage",
             "--n-beads",
             "1",
@@ -142,7 +142,7 @@ def test_crop_rois_command_writes_roi_outputs(tmp_path: Path) -> None:
             str(points_csv),
             "--output-dir",
             str(output_dir),
-            "--metadata-source",
+            "--metadata-format",
             "thorimage",
             "--radius-z-um",
             "1.0",

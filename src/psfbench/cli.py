@@ -9,7 +9,7 @@ from psfbench.detection import DetectionParams, detect_beads
 from psfbench.gui import edit_points_with_napari
 from psfbench.io import read_tiff_stack
 from psfbench.measurement import measure_rois_from_manifest
-from psfbench.metadata import MetadataSource, VoxelSize, resolve_voxel_size
+from psfbench.metadata import MetadataFormat, VoxelSize, resolve_voxel_size
 from psfbench.plotting import plot_summary
 from psfbench.roi import save_rois
 from psfbench.summary import summarize_measurement_files, summarize_measurements
@@ -28,9 +28,9 @@ def main(
     output_dir: Path | None = typer.Option(None, "--output-dir", "-o", help="Output directory for one-shot analysis."),
     xy_um_per_px: float | None = typer.Option(None, help="XY pixel size in micrometers per pixel."),
     z_um_per_px: float | None = typer.Option(None, help="Z step size in micrometers per pixel."),
-    metadata_source: MetadataSource = typer.Option(
-        MetadataSource.NONE,
-        help="Metadata source used to fill missing voxel size values.",
+    metadata_format: MetadataFormat = typer.Option(
+        MetadataFormat.NONE,
+        help="Metadata format used to fill missing voxel size values.",
     ),
     n_beads: int = typer.Option(20, help="Maximum number of bead candidates to keep."),
     threshold_percentile: float = typer.Option(99.8, help="Percentile threshold after smoothing."),
@@ -56,7 +56,7 @@ def main(
         output_dir=output_dir,
         xy_um_per_px=xy_um_per_px,
         z_um_per_px=z_um_per_px,
-        metadata_source=metadata_source,
+        metadata_format=metadata_format,
         n_beads=n_beads,
         threshold_percentile=threshold_percentile,
         center_fraction=center_fraction,
@@ -78,9 +78,9 @@ def detect(
     output: Path = typer.Option(..., "--output", "-o", help="Output CSV path."),
     xy_um_per_px: float | None = typer.Option(None, help="XY pixel size in micrometers per pixel."),
     z_um_per_px: float | None = typer.Option(None, help="Z step size in micrometers per pixel."),
-    metadata_source: MetadataSource = typer.Option(
-        MetadataSource.NONE,
-        help="Metadata source used to fill missing voxel size values.",
+    metadata_format: MetadataFormat = typer.Option(
+        MetadataFormat.NONE,
+        help="Metadata format used to fill missing voxel size values.",
     ),
     n_beads: int = typer.Option(20, help="Maximum number of bead candidates to keep."),
     threshold_percentile: float = typer.Option(99.8, help="Percentile threshold after smoothing."),
@@ -96,7 +96,7 @@ def detect(
         output=output,
         xy_um_per_px=xy_um_per_px,
         z_um_per_px=z_um_per_px,
-        metadata_source=metadata_source,
+        metadata_format=metadata_format,
         n_beads=n_beads,
         threshold_percentile=threshold_percentile,
         center_fraction=center_fraction,
@@ -115,9 +115,9 @@ def batch_detect(
     output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Directory for output point CSV files."),
     xy_um_per_px: float | None = typer.Option(None, help="XY pixel size in micrometers per pixel."),
     z_um_per_px: float | None = typer.Option(None, help="Z step size in micrometers per pixel."),
-    metadata_source: MetadataSource = typer.Option(
-        MetadataSource.NONE,
-        help="Metadata source used to fill missing voxel size values.",
+    metadata_format: MetadataFormat = typer.Option(
+        MetadataFormat.NONE,
+        help="Metadata format used to fill missing voxel size values.",
     ),
     n_beads: int = typer.Option(20, help="Maximum number of bead candidates to keep per stack."),
     threshold_percentile: float = typer.Option(99.8, help="Percentile threshold after smoothing."),
@@ -147,7 +147,7 @@ def batch_detect(
             output=output,
             xy_um_per_px=xy_um_per_px,
             z_um_per_px=z_um_per_px,
-            metadata_source=metadata_source,
+            metadata_format=metadata_format,
             n_beads=n_beads,
             threshold_percentile=threshold_percentile,
             center_fraction=center_fraction,
@@ -166,7 +166,7 @@ def _detect_one(
     output: Path,
     xy_um_per_px: float | None,
     z_um_per_px: float | None,
-    metadata_source: MetadataSource,
+    metadata_format: MetadataFormat,
     n_beads: int,
     threshold_percentile: float,
     center_fraction: float,
@@ -178,7 +178,7 @@ def _detect_one(
 ):
     voxel_size = _resolve_voxel_size_or_exit(
         input_path=input,
-        metadata_source=metadata_source,
+        metadata_format=metadata_format,
         xy_um_per_px=xy_um_per_px,
         z_um_per_px=z_um_per_px,
     )
@@ -245,7 +245,7 @@ def _analyze_one(
     output_dir: Path,
     xy_um_per_px: float | None,
     z_um_per_px: float | None,
-    metadata_source: MetadataSource,
+    metadata_format: MetadataFormat,
     n_beads: int,
     threshold_percentile: float,
     center_fraction: float,
@@ -261,7 +261,7 @@ def _analyze_one(
 ) -> None:
     voxel_size = _resolve_voxel_size_or_exit(
         input_path=input,
-        metadata_source=metadata_source,
+        metadata_format=metadata_format,
         xy_um_per_px=xy_um_per_px,
         z_um_per_px=z_um_per_px,
     )
@@ -331,14 +331,14 @@ def edit(
     output: Path = typer.Option(..., "--output", "-o", help="Corrected output CSV path."),
     xy_um_per_px: float | None = typer.Option(None, help="XY pixel size in micrometers per pixel."),
     z_um_per_px: float | None = typer.Option(None, help="Z step size in micrometers per pixel."),
-    metadata_source: MetadataSource = typer.Option(
-        MetadataSource.NONE,
-        help="Metadata source used to fill missing voxel size values.",
+    metadata_format: MetadataFormat = typer.Option(
+        MetadataFormat.NONE,
+        help="Metadata format used to fill missing voxel size values.",
     ),
 ) -> None:
     voxel_size = _resolve_voxel_size_or_exit(
         input_path=input,
-        metadata_source=metadata_source,
+        metadata_format=metadata_format,
         xy_um_per_px=xy_um_per_px,
         z_um_per_px=z_um_per_px,
     )
@@ -366,9 +366,9 @@ def crop_rois(
     output_dir: Path = typer.Option(..., "--output-dir", "-o", help="Directory for ROI TIFF files and manifest."),
     xy_um_per_px: float | None = typer.Option(None, help="XY pixel size in micrometers per pixel."),
     z_um_per_px: float | None = typer.Option(None, help="Z step size in micrometers per pixel."),
-    metadata_source: MetadataSource = typer.Option(
-        MetadataSource.NONE,
-        help="Metadata source used to fill missing voxel size values.",
+    metadata_format: MetadataFormat = typer.Option(
+        MetadataFormat.NONE,
+        help="Metadata format used to fill missing voxel size values.",
     ),
     radius_z_um: float = typer.Option(3.0, help="Half-size of each ROI in Z, in micrometers."),
     radius_xy_um: float = typer.Option(3.0, help="Half-size of each ROI in X and Y, in micrometers."),
@@ -376,7 +376,7 @@ def crop_rois(
 ) -> None:
     voxel_size = _resolve_voxel_size_or_exit(
         input_path=input,
-        metadata_source=metadata_source,
+        metadata_format=metadata_format,
         xy_um_per_px=xy_um_per_px,
         z_um_per_px=z_um_per_px,
     )
@@ -465,14 +465,14 @@ def plot_summary_command(
 def _resolve_voxel_size_or_exit(
     *,
     input_path: Path,
-    metadata_source: MetadataSource,
+    metadata_format: MetadataFormat,
     xy_um_per_px: float | None,
     z_um_per_px: float | None,
 ) -> VoxelSize:
     try:
         voxel_size = resolve_voxel_size(
             input_path=input_path,
-            metadata_source=metadata_source,
+            metadata_format=metadata_format,
             xy_um_per_px=xy_um_per_px,
             z_um_per_px=z_um_per_px,
         )

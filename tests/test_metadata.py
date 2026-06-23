@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from psfbench.metadata import MetadataSource, read_thorimage_metadata, resolve_voxel_size
+from psfbench.metadata import MetadataFormat, read_thorimage_metadata, resolve_voxel_size
 
 
 def test_read_thorimage_metadata_prefers_width_over_rounded_pixel_size(tmp_path: Path) -> None:
@@ -12,7 +12,7 @@ def test_read_thorimage_metadata_prefers_width_over_rounded_pixel_size(tmp_path:
 
     metadata = read_thorimage_metadata(tmp_path)
 
-    assert metadata.source == MetadataSource.THORIMAGE
+    assert metadata.format == MetadataFormat.THORIMAGE
     assert metadata.z_um_per_px == 0.2
     assert metadata.xy_um_per_px == pytest.approx(119.26 / 1024)
     assert metadata.size_z_px == 76
@@ -35,7 +35,7 @@ def test_resolve_voxel_size_prefers_cli_values_over_metadata(tmp_path: Path) -> 
 
     voxel_size = resolve_voxel_size(
         input_path=tmp_path,
-        metadata_source=MetadataSource.THORIMAGE,
+        metadata_format=MetadataFormat.THORIMAGE,
         xy_um_per_px=0.12,
         z_um_per_px=None,
     )
@@ -48,7 +48,7 @@ def test_resolve_voxel_size_requires_values_without_metadata(tmp_path: Path) -> 
     with pytest.raises(ValueError, match="--xy-um-per-px, --z-um-per-px"):
         resolve_voxel_size(
             input_path=tmp_path,
-            metadata_source=MetadataSource.NONE,
+            metadata_format=MetadataFormat.NONE,
             xy_um_per_px=None,
             z_um_per_px=None,
         )

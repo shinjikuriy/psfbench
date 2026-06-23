@@ -1,6 +1,6 @@
 # psfbench
 
-`psfbench` is a small Python/uv project for detecting fluorescent bead centers in 3D TIFF stacks and correcting those candidates in napari.
+`psfbench` is a small Python/uv project for measuring PSF bead data from 3D TIFF stacks.
 
 The current implementation covers:
 
@@ -14,8 +14,10 @@ The current implementation covers:
 - keep about 20 bead candidates
 - open napari for manual point editing
 - save corrected `(z, y, x)` point coordinates to CSV
-
-FWHM analysis is planned for a later step.
+- crop bead-centered 3D ROIs
+- estimate Gaussian FWHM values for X, Y, and Z profiles
+- keep direct line-profile FWHM values as diagnostics
+- write per-bead measurements, condition summaries, QC flags, and summary plots
 
 ## Setup
 
@@ -223,6 +225,8 @@ uv run psfbench measure-rois \
 
 The measurement subtracts a low-percentile ROI background, finds the ROI peak, extracts X/Y/Z line profiles through that peak, fits each profile with a 1D Gaussian, and computes FWHM from the fitted sigma. It also reports direct line-profile FWHM values by linear interpolation at half maximum as diagnostic columns.
 
+This is intentionally a 1D axis-profile measurement. It is suitable for consistent condition-to-condition comparison of bead PSFs, especially near the optical axis. It does not currently perform sub-voxel center estimation or full 3D Gaussian fitting. Those approaches may improve absolute accuracy, but they also add assumptions and fitting failure modes. The current implementation keeps the simpler 1D Gaussian FWHM as the primary metric and exposes QC columns so suspicious beads can be reviewed.
+
 The output CSV includes:
 
 - `FWHM_X_um`
@@ -341,6 +345,16 @@ Default detection parameters:
 
 The local maximum filter size is computed from the physical minimum distance and voxel size.
 
-## Planned FWHM Analysis
+Candidate ranking intentionally prefers beads near the XY center by default. This matches the current use case of comparing near-axis PSF measurements across filling-rate conditions. If off-axis PSF variation is the target, adjust `--center-fraction` or use the lower-level commands to review a broader set of beads.
 
-The next step is to use corrected points as input for ROI cropping, Gaussian fitting, and FWHM calculation for `FWHM_X`, `FWHM_Y`, `FWHM_Z`, `FWHM_XY_mean`, intensity metrics, and filling-rate summaries.
+## Measurement Limitations
+
+Current measurement choices are deliberately conservative:
+
+- bead centers are taken from the integer-pixel ROI peak after background subtraction
+- each FWHM is measured from a 1D axis profile through that peak
+- ROI background is a single low-percentile scalar
+- Gaussian fits are unweighted
+- `integrated_intensity` is the background-subtracted sum over the whole ROI
+
+These choices are simple, reproducible, and useful for relative comparisons. Future versions may add sub-voxel center refinement, averaged profile extraction, local background modeling, weighted fitting, or full 3D Gaussian fitting.

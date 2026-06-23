@@ -135,6 +135,3 @@ def select_spaced_candidates(points: np.ndarray, params: DetectionParams) -> np.
     if not selected:
         return np.empty((0, 3), dtype=float)
     return np.vstack(selected).astype(float)
-
-
-# TODO: corrected pointsを入力にROI切り出し、Gaussian fit、FWHM計算へ進む。

@@ -5,7 +5,45 @@ import pandas as pd
 import pytest
 import tifffile
 
-from psfbench.measurement import estimate_fwhm_from_profile, measure_roi, measure_rois_from_manifest
+from psfbench.measurement import (
+    estimate_fwhm_from_profile,
+    extract_roi_profiles,
+    measure_roi,
+    measure_rois_from_manifest,
+)
+
+
+def test_extract_roi_profiles_returns_peak_centered_axes() -> None:
+    roi = np.arange(5 * 7 * 9, dtype=np.float32).reshape(5, 7, 9)
+
+    profiles = extract_roi_profiles(
+        roi,
+        peak_zyx=(2, 3, 4),
+        z_um_per_px=0.5,
+        xy_um_per_px=0.2,
+    )
+
+    np.testing.assert_array_equal(profiles.z.values, roi[:, 3, 4])
+    np.testing.assert_array_equal(profiles.y.values, roi[2, :, 4])
+    np.testing.assert_array_equal(profiles.x.values, roi[2, 3, :])
+    np.testing.assert_allclose(profiles.z.coordinates_um, [-1.0, -0.5, 0.0, 0.5, 1.0])
+    np.testing.assert_allclose(profiles.y.coordinates_um, [-0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6])
+    np.testing.assert_allclose(profiles.x.coordinates_um, [-0.8, -0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6, 0.8])
+    assert profiles.z.peak_index == 2
+    assert profiles.y.peak_index == 3
+    assert profiles.x.peak_index == 4
+
+
+def test_extract_roi_profiles_rejects_peak_outside_roi() -> None:
+    roi = np.zeros((3, 3, 3), dtype=np.float32)
+
+    with pytest.raises(ValueError, match="outside ROI shape"):
+        extract_roi_profiles(
+            roi,
+            peak_zyx=(3, 1, 1),
+            z_um_per_px=0.5,
+            xy_um_per_px=0.2,
+        )
 
 
 def test_estimate_fwhm_from_profile_interpolates_crossings() -> None:

@@ -9,6 +9,21 @@ import tifffile
 
 
 @dataclass(frozen=True)
+class AxisProfile:
+    values: np.ndarray
+    coordinates_um: np.ndarray
+    peak_index: int
+    um_per_px: float
+
+
+@dataclass(frozen=True)
+class RoiProfiles:
+    z: AxisProfile
+    y: AxisProfile
+    x: AxisProfile
+
+
+@dataclass(frozen=True)
 class RoiMeasurement:
     bead_index: int
     roi_path: Path
@@ -23,6 +38,39 @@ class RoiMeasurement:
     peak_intensity: float
     integrated_intensity: float
     background: float
+
+
+def extract_roi_profiles(
+    roi: np.ndarray,
+    *,
+    peak_zyx: tuple[int, int, int],
+    z_um_per_px: float,
+    xy_um_per_px: float,
+) -> RoiProfiles:
+    if roi.ndim != 3:
+        raise ValueError(f"Expected ROI with shape (z, y, x), got {roi.shape}")
+
+    peak_z, peak_y, peak_x = peak_zyx
+    z_size, y_size, x_size = roi.shape
+    if not (0 <= peak_z < z_size and 0 <= peak_y < y_size and 0 <= peak_x < x_size):
+        raise ValueError(f"Peak index {peak_zyx} is outside ROI shape {roi.shape}")
+
+    return RoiProfiles(
+        z=_make_axis_profile(roi[:, peak_y, peak_x], peak_index=peak_z, um_per_px=z_um_per_px),
+        y=_make_axis_profile(roi[peak_z, :, peak_x], peak_index=peak_y, um_per_px=xy_um_per_px),
+        x=_make_axis_profile(roi[peak_z, peak_y, :], peak_index=peak_x, um_per_px=xy_um_per_px),
+    )
+
+
+def _make_axis_profile(profile: np.ndarray, *, peak_index: int, um_per_px: float) -> AxisProfile:
+    values = np.asarray(profile, dtype=float).copy()
+    coordinates_um = (np.arange(values.size, dtype=float) - peak_index) * um_per_px
+    return AxisProfile(
+        values=values,
+        coordinates_um=coordinates_um,
+        peak_index=int(peak_index),
+        um_per_px=float(um_per_px),
+    )
 
 
 def measure_roi(
@@ -41,10 +89,16 @@ def measure_roi(
     peak_z, peak_y, peak_x = np.unravel_index(int(np.argmax(corrected)), corrected.shape)
     peak_intensity = float(roi_float[peak_z, peak_y, peak_x])
     integrated_intensity = float(corrected.sum())
+    profiles = extract_roi_profiles(
+        corrected,
+        peak_zyx=(int(peak_z), int(peak_y), int(peak_x)),
+        z_um_per_px=z_um_per_px,
+        xy_um_per_px=xy_um_per_px,
+    )
 
-    fwhm_z_um = estimate_fwhm_from_profile(corrected[:, peak_y, peak_x], z_um_per_px)
-    fwhm_y_um = estimate_fwhm_from_profile(corrected[peak_z, :, peak_x], xy_um_per_px)
-    fwhm_x_um = estimate_fwhm_from_profile(corrected[peak_z, peak_y, :], xy_um_per_px)
+    fwhm_z_um = estimate_fwhm_from_profile(profiles.z.values, profiles.z.um_per_px)
+    fwhm_y_um = estimate_fwhm_from_profile(profiles.y.values, profiles.y.um_per_px)
+    fwhm_x_um = estimate_fwhm_from_profile(profiles.x.values, profiles.x.um_per_px)
     fwhm_xy_mean_um = float(np.nanmean([fwhm_x_um, fwhm_y_um]))
     fwhm_x_over_y = float(fwhm_x_um / fwhm_y_um) if fwhm_y_um > 0 else np.nan
 

@@ -144,26 +144,44 @@ def test_estimate_gaussian_fwhm_reports_axis_metrics() -> None:
     assert result.fwhm_xy_mean_um == pytest.approx(2.3548200450309493 * 0.45)
     assert result.fwhm_x_over_y == pytest.approx(0.4 / 0.5)
 
-def test_measure_roi_reports_line_profile_fwhm_and_intensity() -> None:
-    z_profile = np.array([0, 2, 4, 8, 4, 2, 0], dtype=np.float32)
-    y_profile = np.array([0, 1, 4, 8, 4, 1, 0], dtype=np.float32)
-    x_profile = np.array([0, 3, 6, 8, 6, 3, 0], dtype=np.float32)
-    roi = np.zeros((7, 7, 7), dtype=np.float32)
-    roi[:, 3, 3] = z_profile
-    roi[3, :, 3] = y_profile
-    roi[3, 3, :] = x_profile
 
-    measurement = measure_roi(roi, z_um_per_px=0.5, xy_um_per_px=0.2, background_percentile=0)
+def test_measure_roi_reports_gaussian_and_line_profile_fwhm_and_intensity() -> None:
+    size = 41
+    center = size // 2
+    z_um_per_px = 0.2
+    xy_um_per_px = 0.1
+    z_sigma_um = 0.7
+    y_sigma_um = 0.4
+    x_sigma_um = 0.3
+    z_um = (np.arange(size) - center) * z_um_per_px
+    xy_um = (np.arange(size) - center) * xy_um_per_px
+    roi = np.zeros((size, size, size), dtype=np.float32)
+    roi[:, center, center] = 100 * np.exp(-0.5 * (z_um / z_sigma_um) ** 2)
+    roi[center, :, center] = 100 * np.exp(-0.5 * (xy_um / y_sigma_um) ** 2)
+    roi[center, center, :] = 100 * np.exp(-0.5 * (xy_um / x_sigma_um) ** 2)
 
-    assert measurement.peak_z == 3
-    assert measurement.peak_y == 3
-    assert measurement.peak_x == 3
-    assert measurement.fwhm_z_um == pytest.approx(1.0)
-    assert measurement.fwhm_y_um == pytest.approx(0.4)
-    assert measurement.fwhm_x_um == pytest.approx(2 / 3)
-    assert measurement.fwhm_xy_mean_um == pytest.approx((0.4 + 2 / 3) / 2)
-    assert measurement.fwhm_x_over_y == pytest.approx((2 / 3) / 0.4)
-    assert measurement.peak_intensity == 8
+    measurement = measure_roi(
+        roi,
+        z_um_per_px=z_um_per_px,
+        xy_um_per_px=xy_um_per_px,
+        background_percentile=0,
+    )
+
+    assert measurement.peak_z == center
+    assert measurement.peak_y == center
+    assert measurement.peak_x == center
+    assert measurement.gaussian_fwhm.z_fit.success
+    assert measurement.gaussian_fwhm.y_fit.success
+    assert measurement.gaussian_fwhm.x_fit.success
+    assert measurement.fwhm_z_um == pytest.approx(2.3548200450309493 * z_sigma_um, rel=1e-5)
+    assert measurement.fwhm_y_um == pytest.approx(2.3548200450309493 * y_sigma_um, rel=1e-5)
+    assert measurement.fwhm_x_um == pytest.approx(2.3548200450309493 * x_sigma_um, rel=1e-5)
+    assert measurement.fwhm_xy_mean_um == pytest.approx(2.3548200450309493 * (x_sigma_um + y_sigma_um) / 2)
+    assert measurement.fwhm_x_over_y == pytest.approx(x_sigma_um / y_sigma_um)
+    assert measurement.fwhm_z_line_um == pytest.approx(measurement.fwhm_z_um, rel=0.02)
+    assert measurement.fwhm_y_line_um == pytest.approx(measurement.fwhm_y_um, rel=0.02)
+    assert measurement.fwhm_x_line_um == pytest.approx(measurement.fwhm_x_um, rel=0.02)
+    assert measurement.peak_intensity == 100
 
 
 def test_measure_rois_from_manifest_writes_measurement_csv(tmp_path) -> None:
@@ -198,4 +216,5 @@ def test_measure_rois_from_manifest_writes_measurement_csv(tmp_path) -> None:
     assert output.exists()
     assert len(measurements) == 1
     assert measurements.loc[0, "bead_index"] == 1
-    assert measurements.loc[0, "FWHM_Z_um"] == pytest.approx(1.0)
+    assert measurements.loc[0, "FWHM_Z_line_um"] == pytest.approx(1.0)
+    assert measurements.loc[0, "gaussian_z_success"]

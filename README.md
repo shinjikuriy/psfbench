@@ -213,7 +213,7 @@ ROIs that would extend beyond the stack bounds are skipped and recorded in `roi_
 
 ## Measure ROIs Command
 
-Measure each saved ROI with a simple peak-centered line-profile FWHM estimate:
+Measure each saved ROI with Gaussian FWHM estimates and line-profile diagnostic widths:
 
 ```bash
 uv run psfbench measure-rois \
@@ -221,7 +221,7 @@ uv run psfbench measure-rois \
   --output outputs/D100per_pow5.18per_measurements.csv
 ```
 
-The current measurement is a first-pass implementation. It subtracts a low-percentile ROI background, finds the ROI peak, extracts X/Y/Z line profiles through that peak, and estimates FWHM by linear interpolation at half maximum.
+The measurement subtracts a low-percentile ROI background, finds the ROI peak, extracts X/Y/Z line profiles through that peak, fits each profile with a 1D Gaussian, and computes FWHM from the fitted sigma. It also reports direct line-profile FWHM values by linear interpolation at half maximum as diagnostic columns.
 
 The output CSV includes:
 
@@ -230,6 +230,12 @@ The output CSV includes:
 - `FWHM_Z_um`
 - `FWHM_XY_mean_um`
 - `FWHM_X_over_Y`
+- `FWHM_X_line_um`
+- `FWHM_Y_line_um`
+- `FWHM_Z_line_um`
+- `FWHM_XY_mean_line_um`
+- `FWHM_X_over_Y_line`
+- Gaussian fit status and quality columns such as `gaussian_x_success`, `gaussian_x_sigma_um`, and `gaussian_x_r_squared`
 - `peak_intensity`
 - `integrated_intensity`
 

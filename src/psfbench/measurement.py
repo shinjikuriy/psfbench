@@ -63,6 +63,12 @@ class RoiMeasurement:
     fwhm_x_um: float
     fwhm_xy_mean_um: float
     fwhm_x_over_y: float
+    fwhm_z_line_um: float
+    fwhm_y_line_um: float
+    fwhm_x_line_um: float
+    fwhm_xy_mean_line_um: float
+    fwhm_x_over_y_line: float
+    gaussian_fwhm: GaussianFwhmResult
     peak_intensity: float
     integrated_intensity: float
     background: float
@@ -256,11 +262,13 @@ def measure_roi(
         xy_um_per_px=xy_um_per_px,
     )
 
-    fwhm_z_um = estimate_fwhm_from_profile(profiles.z.values, profiles.z.um_per_px)
-    fwhm_y_um = estimate_fwhm_from_profile(profiles.y.values, profiles.y.um_per_px)
-    fwhm_x_um = estimate_fwhm_from_profile(profiles.x.values, profiles.x.um_per_px)
-    fwhm_xy_mean_um = float(np.nanmean([fwhm_x_um, fwhm_y_um]))
-    fwhm_x_over_y = float(fwhm_x_um / fwhm_y_um) if fwhm_y_um > 0 else np.nan
+    gaussian_fwhm = estimate_gaussian_fwhm(profiles)
+
+    fwhm_z_line_um = estimate_fwhm_from_profile(profiles.z.values, profiles.z.um_per_px)
+    fwhm_y_line_um = estimate_fwhm_from_profile(profiles.y.values, profiles.y.um_per_px)
+    fwhm_x_line_um = estimate_fwhm_from_profile(profiles.x.values, profiles.x.um_per_px)
+    fwhm_xy_mean_line_um = _nanmean_or_nan([fwhm_x_line_um, fwhm_y_line_um])
+    fwhm_x_over_y_line = float(fwhm_x_line_um / fwhm_y_line_um) if fwhm_y_line_um > 0 else np.nan
 
     return RoiMeasurement(
         bead_index=-1,
@@ -268,11 +276,17 @@ def measure_roi(
         peak_z=int(peak_z),
         peak_y=int(peak_y),
         peak_x=int(peak_x),
-        fwhm_z_um=fwhm_z_um,
-        fwhm_y_um=fwhm_y_um,
-        fwhm_x_um=fwhm_x_um,
-        fwhm_xy_mean_um=fwhm_xy_mean_um,
-        fwhm_x_over_y=fwhm_x_over_y,
+        fwhm_z_um=gaussian_fwhm.fwhm_z_um,
+        fwhm_y_um=gaussian_fwhm.fwhm_y_um,
+        fwhm_x_um=gaussian_fwhm.fwhm_x_um,
+        fwhm_xy_mean_um=gaussian_fwhm.fwhm_xy_mean_um,
+        fwhm_x_over_y=gaussian_fwhm.fwhm_x_over_y,
+        fwhm_z_line_um=fwhm_z_line_um,
+        fwhm_y_line_um=fwhm_y_line_um,
+        fwhm_x_line_um=fwhm_x_line_um,
+        fwhm_xy_mean_line_um=fwhm_xy_mean_line_um,
+        fwhm_x_over_y_line=fwhm_x_over_y_line,
+        gaussian_fwhm=gaussian_fwhm,
         peak_intensity=peak_intensity,
         integrated_intensity=integrated_intensity,
         background=background,
@@ -344,26 +358,47 @@ def measure_rois_from_manifest(
             xy_um_per_px=float(row["xy_um_per_px"]),
             background_percentile=background_percentile,
         )
-        rows.append(
-            {
-                "bead_index": int(row["bead_index"]),
-                "roi_path": str(roi_path),
-                "peak_z_roi": measurement.peak_z,
-                "peak_y_roi": measurement.peak_y,
-                "peak_x_roi": measurement.peak_x,
-                "FWHM_X_um": measurement.fwhm_x_um,
-                "FWHM_Y_um": measurement.fwhm_y_um,
-                "FWHM_Z_um": measurement.fwhm_z_um,
-                "FWHM_XY_mean_um": measurement.fwhm_xy_mean_um,
-                "FWHM_X_over_Y": measurement.fwhm_x_over_y,
-                "peak_intensity": measurement.peak_intensity,
-                "integrated_intensity": measurement.integrated_intensity,
-                "background": measurement.background,
-            }
-        )
+        output_row = {
+            "bead_index": int(row["bead_index"]),
+            "roi_path": str(roi_path),
+            "peak_z_roi": measurement.peak_z,
+            "peak_y_roi": measurement.peak_y,
+            "peak_x_roi": measurement.peak_x,
+            "FWHM_X_um": measurement.fwhm_x_um,
+            "FWHM_Y_um": measurement.fwhm_y_um,
+            "FWHM_Z_um": measurement.fwhm_z_um,
+            "FWHM_XY_mean_um": measurement.fwhm_xy_mean_um,
+            "FWHM_X_over_Y": measurement.fwhm_x_over_y,
+            "FWHM_X_line_um": measurement.fwhm_x_line_um,
+            "FWHM_Y_line_um": measurement.fwhm_y_line_um,
+            "FWHM_Z_line_um": measurement.fwhm_z_line_um,
+            "FWHM_XY_mean_line_um": measurement.fwhm_xy_mean_line_um,
+            "FWHM_X_over_Y_line": measurement.fwhm_x_over_y_line,
+            "peak_intensity": measurement.peak_intensity,
+            "integrated_intensity": measurement.integrated_intensity,
+            "background": measurement.background,
+        }
+        output_row.update(_gaussian_fit_columns("x", measurement.gaussian_fwhm.x_fit))
+        output_row.update(_gaussian_fit_columns("y", measurement.gaussian_fwhm.y_fit))
+        output_row.update(_gaussian_fit_columns("z", measurement.gaussian_fwhm.z_fit))
+        rows.append(output_row)
 
     df = pd.DataFrame(rows)
     output_path = Path(output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
     return df
+
+
+def _gaussian_fit_columns(axis: str, fit: GaussianFitResult) -> dict[str, float | bool | str]:
+    prefix = f"gaussian_{axis}"
+    return {
+        f"{prefix}_success": fit.success,
+        f"{prefix}_offset": fit.offset,
+        f"{prefix}_amplitude": fit.amplitude,
+        f"{prefix}_center_um": fit.center_um,
+        f"{prefix}_sigma_um": fit.sigma_um,
+        f"{prefix}_rmse": fit.rmse,
+        f"{prefix}_r_squared": fit.r_squared,
+        f"{prefix}_failure_reason": fit.failure_reason,
+    }

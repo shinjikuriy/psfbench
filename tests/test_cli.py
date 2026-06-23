@@ -196,7 +196,8 @@ def test_measure_rois_command_writes_measurement_csv(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     measurements = pd.read_csv(output)
     assert len(measurements) == 1
-    assert measurements.loc[0, "FWHM_Z_um"] == 1.0
+    assert measurements.loc[0, "FWHM_Z_line_um"] == 1.0
+    assert bool(measurements.loc[0, "gaussian_z_success"])
 
 
 def test_aggregate_measurements_command_writes_summary_csv(tmp_path: Path) -> None:

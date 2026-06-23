@@ -12,6 +12,11 @@ DEFAULT_MEASUREMENT_COLUMNS = [
     "FWHM_Z_um",
     "FWHM_XY_mean_um",
     "FWHM_X_over_Y",
+    "FWHM_X_line_um",
+    "FWHM_Y_line_um",
+    "FWHM_Z_line_um",
+    "FWHM_XY_mean_line_um",
+    "FWHM_X_over_Y_line",
     "peak_intensity",
     "integrated_intensity",
 ]

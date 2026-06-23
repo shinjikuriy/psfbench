@@ -10,6 +10,48 @@ from typer.testing import CliRunner
 from psfbench.cli import app
 
 
+def test_top_level_command_runs_one_shot_analysis(tmp_path: Path) -> None:
+    input_dir = tmp_path / "thorimage_stack"
+    output_dir = tmp_path / "analysis"
+    input_dir.mkdir()
+    write_tiny_thorimage_stack(input_dir, peak_yx=(40, 40))
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "--input",
+            str(input_dir),
+            "--output-dir",
+            str(output_dir),
+            "--metadata-source",
+            "thorimage",
+            "--no-gui",
+            "--n-beads",
+            "1",
+            "--threshold-percentile",
+            "99.5",
+            "--margin-z-um",
+            "2.0",
+            "--margin-xy-um",
+            "2.0",
+            "--radius-z-um",
+            "1.0",
+            "--radius-xy-um",
+            "0.6",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (output_dir / "points.csv").exists()
+    assert (output_dir / "rois" / "bead_0001.tif").exists()
+    assert (output_dir / "rois" / "roi_manifest.csv").exists()
+    assert (output_dir / "measurements.csv").exists()
+    assert (output_dir / "summary.csv").exists()
+    summary = pd.read_csv(output_dir / "summary.csv")
+    assert summary.loc[0, "condition"] == input_dir.name
+    assert summary.loc[0, "FWHM_Z_um_count"] == 1
+
+
 def test_detect_uses_thorimage_metadata_source(tmp_path: Path) -> None:
     input_dir = tmp_path / "thorimage_stack"
     input_dir.mkdir()

@@ -31,6 +31,42 @@ Run the CLI through uv:
 uv run psfbench --help
 ```
 
+## One-Shot Analysis
+
+For a single measurement dataset, run `psfbench` without a subcommand:
+
+```bash
+uv run psfbench \
+  --input ../260616_psf/D64.7per_pow3.0per \
+  --output-dir outputs/D64.7per_pow3.0per \
+  --metadata-source thorimage
+```
+
+Metadata is not used unless explicitly requested. For ThorImage data, specify `--metadata-source thorimage`. After napari is closed, analysis continues automatically.
+
+The output directory contains:
+
+```text
+outputs/D64.7per_pow3.0per/
+  points.csv
+  rois/
+    bead_0001.tif
+    ...
+    roi_manifest.csv
+  measurements.csv
+  summary.csv
+```
+
+To run without napari:
+
+```bash
+uv run psfbench \
+  --input ../260616_psf/D64.7per_pow3.0per \
+  --output-dir outputs/D64.7per_pow3.0per \
+  --metadata-source thorimage \
+  --no-gui
+```
+
 ## TIFF Stack Assumptions
 
 Input can be either:

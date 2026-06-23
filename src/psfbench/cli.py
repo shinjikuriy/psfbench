@@ -12,10 +12,64 @@ from psfbench.measurement import measure_rois_from_manifest
 from psfbench.metadata import MetadataSource, VoxelSize, resolve_voxel_size
 from psfbench.plotting import plot_summary
 from psfbench.roi import save_rois
-from psfbench.summary import summarize_measurement_files
+from psfbench.summary import summarize_measurement_files, summarize_measurements
 
 
-app = typer.Typer(help="Detect and manually correct PSF bead centers in 3D TIFF stacks.")
+app = typer.Typer(
+    help="Analyze PSF beads in 3D TIFF stacks.",
+    invoke_without_command=True,
+)
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    input: Path | None = typer.Option(None, "--input", "-i", help="Input stack file or directory for one-shot analysis."),
+    output_dir: Path | None = typer.Option(None, "--output-dir", "-o", help="Output directory for one-shot analysis."),
+    xy_um_per_px: float | None = typer.Option(None, help="XY pixel size in micrometers per pixel."),
+    z_um_per_px: float | None = typer.Option(None, help="Z step size in micrometers per pixel."),
+    metadata_source: MetadataSource = typer.Option(
+        MetadataSource.NONE,
+        help="Metadata source used to fill missing voxel size values.",
+    ),
+    n_beads: int = typer.Option(20, help="Maximum number of bead candidates to keep."),
+    threshold_percentile: float = typer.Option(99.8, help="Percentile threshold after smoothing."),
+    center_fraction: float = typer.Option(0.6, help="Prefer candidates in this central XY fraction."),
+    background_percentile: float = typer.Option(10.0, help="Low percentile used as detection background."),
+    min_distance_um: float = typer.Option(2.0, help="Minimum distance between bead candidates."),
+    margin_z_um: float = typer.Option(3.0, help="Exclude candidates this close to Z edges."),
+    margin_xy_um: float = typer.Option(3.0, help="Exclude candidates this close to XY edges."),
+    radius_z_um: float = typer.Option(3.0, help="Half-size of each ROI in Z, in micrometers."),
+    radius_xy_um: float = typer.Option(3.0, help="Half-size of each ROI in X and Y, in micrometers."),
+    roi_background_percentile: float = typer.Option(10.0, help="Low percentile used as ROI measurement background."),
+    condition: str | None = typer.Option(None, help="Condition label written to summary.csv."),
+    gui: bool = typer.Option(True, "--gui/--no-gui", help="Open napari for manual point correction."),
+) -> None:
+    if ctx.invoked_subcommand is not None:
+        return
+    if input is None or output_dir is None:
+        typer.echo(ctx.get_help())
+        raise typer.Exit(0)
+
+    _analyze_one(
+        input=input,
+        output_dir=output_dir,
+        xy_um_per_px=xy_um_per_px,
+        z_um_per_px=z_um_per_px,
+        metadata_source=metadata_source,
+        n_beads=n_beads,
+        threshold_percentile=threshold_percentile,
+        center_fraction=center_fraction,
+        background_percentile=background_percentile,
+        min_distance_um=min_distance_um,
+        margin_z_um=margin_z_um,
+        margin_xy_um=margin_xy_um,
+        radius_z_um=radius_z_um,
+        radius_xy_um=radius_xy_um,
+        roi_background_percentile=roi_background_percentile,
+        condition=condition,
+        gui=gui,
+    )
 
 
 @app.command()
@@ -129,6 +183,40 @@ def _detect_one(
         z_um_per_px=z_um_per_px,
     )
     stack = read_tiff_stack(input)
+    points = _detect_points(
+        stack=stack,
+        voxel_size=voxel_size,
+        n_beads=n_beads,
+        threshold_percentile=threshold_percentile,
+        center_fraction=center_fraction,
+        background_percentile=background_percentile,
+        min_distance_um=min_distance_um,
+        margin_z_um=margin_z_um,
+        margin_xy_um=margin_xy_um,
+        gui=gui,
+    )
+    write_points_csv(
+        output,
+        points,
+        z_um_per_px=voxel_size.z_um_per_px,
+        xy_um_per_px=voxel_size.xy_um_per_px,
+    )
+    return points
+
+
+def _detect_points(
+    *,
+    stack,
+    voxel_size: VoxelSize,
+    n_beads: int,
+    threshold_percentile: float,
+    center_fraction: float,
+    background_percentile: float,
+    min_distance_um: float,
+    margin_z_um: float,
+    margin_xy_um: float,
+    gui: bool,
+):
     params = DetectionParams(
         xy_um_per_px=voxel_size.xy_um_per_px,
         z_um_per_px=voxel_size.z_um_per_px,
@@ -148,13 +236,92 @@ def _detect_one(
             z_um_per_px=voxel_size.z_um_per_px,
             xy_um_per_px=voxel_size.xy_um_per_px,
         )
+    return points
+
+
+def _analyze_one(
+    *,
+    input: Path,
+    output_dir: Path,
+    xy_um_per_px: float | None,
+    z_um_per_px: float | None,
+    metadata_source: MetadataSource,
+    n_beads: int,
+    threshold_percentile: float,
+    center_fraction: float,
+    background_percentile: float,
+    min_distance_um: float,
+    margin_z_um: float,
+    margin_xy_um: float,
+    radius_z_um: float,
+    radius_xy_um: float,
+    roi_background_percentile: float,
+    condition: str | None,
+    gui: bool,
+) -> None:
+    voxel_size = _resolve_voxel_size_or_exit(
+        input_path=input,
+        metadata_source=metadata_source,
+        xy_um_per_px=xy_um_per_px,
+        z_um_per_px=z_um_per_px,
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    points_path = output_dir / "points.csv"
+    roi_dir = output_dir / "rois"
+    measurements_path = output_dir / "measurements.csv"
+    summary_path = output_dir / "summary.csv"
+
+    stack = read_tiff_stack(input)
+    points = _detect_points(
+        stack=stack,
+        voxel_size=voxel_size,
+        n_beads=n_beads,
+        threshold_percentile=threshold_percentile,
+        center_fraction=center_fraction,
+        background_percentile=background_percentile,
+        min_distance_um=min_distance_um,
+        margin_z_um=margin_z_um,
+        margin_xy_um=margin_xy_um,
+        gui=gui,
+    )
     write_points_csv(
-        output,
+        points_path,
         points,
         z_um_per_px=voxel_size.z_um_per_px,
         xy_um_per_px=voxel_size.xy_um_per_px,
     )
-    return points
+    typer.echo(f"Saved {len(points)} points to {points_path}")
+
+    roi_results = save_rois(
+        stack,
+        points,
+        output_dir=roi_dir,
+        z_um_per_px=voxel_size.z_um_per_px,
+        xy_um_per_px=voxel_size.xy_um_per_px,
+        radius_z_um=radius_z_um,
+        radius_xy_um=radius_xy_um,
+    )
+    saved_rois = sum(not result.skipped for result in roi_results)
+    skipped_rois = len(roi_results) - saved_rois
+    typer.echo(f"Saved {saved_rois} ROI TIFF files to {roi_dir} ({skipped_rois} skipped)")
+
+    measurements = measure_rois_from_manifest(
+        roi_dir,
+        output=measurements_path,
+        background_percentile=roi_background_percentile,
+    )
+    typer.echo(f"Saved {len(measurements)} ROI measurements to {measurements_path}")
+
+    measurements_for_summary = measurements.copy()
+    measurements_for_summary.insert(0, "condition", condition or _default_condition_name(input))
+    summary = summarize_measurements(measurements_for_summary)
+    summary.to_csv(summary_path, index=False)
+    typer.echo(f"Saved summary to {summary_path}")
+
+
+def _default_condition_name(input: Path) -> str:
+    return input.name if input.is_dir() else input.stem
 
 
 @app.command()

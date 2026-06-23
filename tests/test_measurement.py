@@ -7,9 +7,12 @@ import tifffile
 
 from psfbench.measurement import (
     AxisProfile,
+    RoiProfiles,
+    estimate_gaussian_fwhm,
     estimate_fwhm_from_profile,
     extract_roi_profiles,
     fit_gaussian_profile,
+    fwhm_from_gaussian_fit,
     measure_roi,
     measure_rois_from_manifest,
 )
@@ -95,6 +98,51 @@ def test_fit_gaussian_profile_reports_failure_for_flat_profile() -> None:
     assert not fit.success
     assert "no positive intensity range" in fit.failure_reason
 
+
+def test_fwhm_from_gaussian_fit_uses_sigma() -> None:
+    coordinates_um = np.linspace(-2.0, 2.0, 41)
+    sigma_um = 0.5
+    values = 2.0 + 10.0 * np.exp(-0.5 * (coordinates_um / sigma_um) ** 2)
+    profile = AxisProfile(
+        values=values,
+        coordinates_um=coordinates_um,
+        peak_index=int(np.argmax(values)),
+        um_per_px=0.1,
+    )
+
+    fit = fit_gaussian_profile(profile)
+
+    assert fwhm_from_gaussian_fit(fit) == pytest.approx(2.3548200450309493 * sigma_um)
+
+
+def test_estimate_gaussian_fwhm_reports_axis_metrics() -> None:
+    coordinates_um = np.linspace(-3.0, 3.0, 61)
+
+    def make_profile(sigma_um: float) -> AxisProfile:
+        values = 1.0 + 25.0 * np.exp(-0.5 * (coordinates_um / sigma_um) ** 2)
+        return AxisProfile(
+            values=values,
+            coordinates_um=coordinates_um,
+            peak_index=int(np.argmax(values)),
+            um_per_px=0.1,
+        )
+
+    result = estimate_gaussian_fwhm(
+        RoiProfiles(
+            z=make_profile(0.8),
+            y=make_profile(0.5),
+            x=make_profile(0.4),
+        )
+    )
+
+    assert result.z_fit.success
+    assert result.y_fit.success
+    assert result.x_fit.success
+    assert result.fwhm_z_um == pytest.approx(2.3548200450309493 * 0.8)
+    assert result.fwhm_y_um == pytest.approx(2.3548200450309493 * 0.5)
+    assert result.fwhm_x_um == pytest.approx(2.3548200450309493 * 0.4)
+    assert result.fwhm_xy_mean_um == pytest.approx(2.3548200450309493 * 0.45)
+    assert result.fwhm_x_over_y == pytest.approx(0.4 / 0.5)
 
 def test_measure_roi_reports_line_profile_fwhm_and_intensity() -> None:
     z_profile = np.array([0, 2, 4, 8, 4, 2, 0], dtype=np.float32)

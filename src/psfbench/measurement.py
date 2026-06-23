@@ -40,6 +40,18 @@ class GaussianFitResult:
 
 
 @dataclass(frozen=True)
+class GaussianFwhmResult:
+    z_fit: GaussianFitResult
+    y_fit: GaussianFitResult
+    x_fit: GaussianFitResult
+    fwhm_z_um: float
+    fwhm_y_um: float
+    fwhm_x_um: float
+    fwhm_xy_mean_um: float
+    fwhm_x_over_y: float
+
+
+@dataclass(frozen=True)
 class RoiMeasurement:
     bead_index: int
     roi_path: Path
@@ -87,6 +99,42 @@ def _make_axis_profile(profile: np.ndarray, *, peak_index: int, um_per_px: float
         peak_index=int(peak_index),
         um_per_px=float(um_per_px),
     )
+
+
+def estimate_gaussian_fwhm(profiles: RoiProfiles) -> GaussianFwhmResult:
+    z_fit = fit_gaussian_profile(profiles.z)
+    y_fit = fit_gaussian_profile(profiles.y)
+    x_fit = fit_gaussian_profile(profiles.x)
+
+    fwhm_z_um = fwhm_from_gaussian_fit(z_fit)
+    fwhm_y_um = fwhm_from_gaussian_fit(y_fit)
+    fwhm_x_um = fwhm_from_gaussian_fit(x_fit)
+    fwhm_xy_mean_um = _nanmean_or_nan([fwhm_x_um, fwhm_y_um])
+    fwhm_x_over_y = float(fwhm_x_um / fwhm_y_um) if fwhm_y_um > 0 else np.nan
+
+    return GaussianFwhmResult(
+        z_fit=z_fit,
+        y_fit=y_fit,
+        x_fit=x_fit,
+        fwhm_z_um=fwhm_z_um,
+        fwhm_y_um=fwhm_y_um,
+        fwhm_x_um=fwhm_x_um,
+        fwhm_xy_mean_um=fwhm_xy_mean_um,
+        fwhm_x_over_y=fwhm_x_over_y,
+    )
+
+
+def fwhm_from_gaussian_fit(fit: GaussianFitResult) -> float:
+    if not fit.success or not np.isfinite(fit.sigma_um) or fit.sigma_um <= 0:
+        return np.nan
+    return float(_GAUSSIAN_FWHM_FACTOR * fit.sigma_um)
+
+
+def _nanmean_or_nan(values: list[float]) -> float:
+    finite_values = [value for value in values if np.isfinite(value)]
+    if not finite_values:
+        return np.nan
+    return float(np.mean(finite_values))
 
 
 def fit_gaussian_profile(profile: AxisProfile) -> GaussianFitResult:

@@ -349,8 +349,6 @@ def evaluate_measurement_quality(
 def _signal_to_background(*, peak_signal: float, background: float) -> float:
     if background > 0:
         return float(peak_signal / background)
-    if peak_signal > 0:
-        return np.inf
     return np.nan
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -36,6 +37,23 @@ def test_summarize_measurements_computes_stats_by_condition() -> None:
     assert summary.loc["B", "FWHM_X_um_count"] == 1
     assert pd.isna(summary.loc["B", "FWHM_X_um_sd"])
     assert pd.isna(summary.loc["B", "FWHM_X_um_sem"])
+
+
+def test_summarize_measurements_ignores_infinite_values() -> None:
+    measurements = pd.DataFrame(
+        {
+            "condition": ["A", "A", "A"],
+            "signal_to_background": [np.inf, 2.0, 4.0],
+        }
+    )
+
+    summary = summarize_measurements(
+        measurements,
+        measurement_columns=["signal_to_background"],
+    ).set_index("condition")
+
+    assert summary.loc["A", "signal_to_background_count"] == 2
+    assert summary.loc["A", "signal_to_background_mean"] == 3.0
 
 
 def test_summarize_measurement_files_reads_directory(tmp_path) -> None:

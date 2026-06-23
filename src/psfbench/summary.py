@@ -92,7 +92,7 @@ def summarize_measurements(
         for column in measurement_columns:
             if column not in group.columns:
                 continue
-            values = pd.to_numeric(group[column], errors="coerce").dropna()
+            values = pd.to_numeric(group[column], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
             count = int(values.count())
             row[f"{column}_count"] = count
             row[f"{column}_mean"] = float(values.mean()) if count else np.nan

@@ -198,6 +198,7 @@ def test_measure_roi_flags_peak_near_roi_edge() -> None:
 
     assert measurement.peak_z == 1
     assert measurement.quality.peak_margin_z_px == 1
+    assert np.isnan(measurement.quality.signal_to_background)
     assert measurement.quality.qc_peak_near_roi_edge
     assert measurement.quality.qc_any_warning
 

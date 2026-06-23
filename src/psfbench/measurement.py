@@ -5,7 +5,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.optimize import curve_fit
 import tifffile
+
+
+_GAUSSIAN_FWHM_FACTOR = 2.3548200450309493
 
 
 @dataclass(frozen=True)
@@ -21,6 +25,18 @@ class RoiProfiles:
     z: AxisProfile
     y: AxisProfile
     x: AxisProfile
+
+
+@dataclass(frozen=True)
+class GaussianFitResult:
+    success: bool
+    offset: float
+    amplitude: float
+    center_um: float
+    sigma_um: float
+    rmse: float
+    r_squared: float
+    failure_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -70,6 +86,102 @@ def _make_axis_profile(profile: np.ndarray, *, peak_index: int, um_per_px: float
         coordinates_um=coordinates_um,
         peak_index=int(peak_index),
         um_per_px=float(um_per_px),
+    )
+
+
+def fit_gaussian_profile(profile: AxisProfile) -> GaussianFitResult:
+    x = np.asarray(profile.coordinates_um, dtype=float)
+    y = np.asarray(profile.values, dtype=float)
+    if x.ndim != 1 or y.ndim != 1 or x.size != y.size:
+        return _failed_gaussian_fit("Profile coordinates and values must be matching 1D arrays.")
+    if x.size < 4:
+        return _failed_gaussian_fit("At least 4 profile points are required for Gaussian fitting.")
+    if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y))):
+        return _failed_gaussian_fit("Profile contains non-finite values.")
+    if profile.um_per_px <= 0:
+        return _failed_gaussian_fit("um_per_px must be positive.")
+
+    y_min = float(np.min(y))
+    y_max = float(np.max(y))
+    if y_max <= y_min:
+        return _failed_gaussian_fit("Profile has no positive intensity range.")
+
+    offset0 = _estimate_profile_offset(y)
+    amplitude0 = max(y_max - offset0, np.finfo(float).eps)
+    center0 = float(x[int(np.argmax(y))])
+    sigma0 = _initial_sigma_um(y, profile.um_per_px)
+    x_min = float(np.min(x))
+    x_max = float(np.max(x))
+    span_um = max(x_max - x_min, profile.um_per_px)
+
+    lower_bounds = [y_min - amplitude0, 0.0, x_min, profile.um_per_px / 10.0]
+    upper_bounds = [y_max, np.inf, x_max, span_um]
+
+    try:
+        params, _ = curve_fit(
+            _gaussian_1d,
+            x,
+            y,
+            p0=[offset0, amplitude0, center0, sigma0],
+            bounds=(lower_bounds, upper_bounds),
+            maxfev=10000,
+        )
+    except (RuntimeError, ValueError, FloatingPointError) as exc:
+        return _failed_gaussian_fit(str(exc))
+
+    offset, amplitude, center_um, sigma_um = (float(value) for value in params)
+    sigma_um = abs(sigma_um)
+    fitted = _gaussian_1d(x, offset, amplitude, center_um, sigma_um)
+    residuals = y - fitted
+    rmse = float(np.sqrt(np.mean(residuals**2)))
+    ss_res = float(np.sum(residuals**2))
+    ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+    r_squared = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else np.nan
+
+    return GaussianFitResult(
+        success=True,
+        offset=offset,
+        amplitude=amplitude,
+        center_um=center_um,
+        sigma_um=sigma_um,
+        rmse=rmse,
+        r_squared=r_squared,
+    )
+
+
+def _gaussian_1d(
+    x: np.ndarray,
+    offset: float,
+    amplitude: float,
+    center_um: float,
+    sigma_um: float,
+) -> np.ndarray:
+    return offset + amplitude * np.exp(-0.5 * ((x - center_um) / sigma_um) ** 2)
+
+
+def _estimate_profile_offset(values: np.ndarray) -> float:
+    edge_width = max(1, values.size // 5)
+    edge_values = np.concatenate([values[:edge_width], values[-edge_width:]])
+    return float(np.median(edge_values))
+
+
+def _initial_sigma_um(values: np.ndarray, um_per_px: float) -> float:
+    fwhm_um = estimate_fwhm_from_profile(values - np.min(values), um_per_px)
+    if np.isfinite(fwhm_um) and fwhm_um > 0:
+        return float(fwhm_um / _GAUSSIAN_FWHM_FACTOR)
+    return float(max(um_per_px, values.size * um_per_px / 6.0))
+
+
+def _failed_gaussian_fit(reason: str) -> GaussianFitResult:
+    return GaussianFitResult(
+        success=False,
+        offset=np.nan,
+        amplitude=np.nan,
+        center_um=np.nan,
+        sigma_um=np.nan,
+        rmse=np.nan,
+        r_squared=np.nan,
+        failure_reason=reason,
     )
 
 

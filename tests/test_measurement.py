@@ -6,8 +6,10 @@ import pytest
 import tifffile
 
 from psfbench.measurement import (
+    AxisProfile,
     estimate_fwhm_from_profile,
     extract_roi_profiles,
+    fit_gaussian_profile,
     measure_roi,
     measure_rois_from_manifest,
 )
@@ -52,6 +54,46 @@ def test_estimate_fwhm_from_profile_interpolates_crossings() -> None:
     fwhm = estimate_fwhm_from_profile(profile, um_per_px=0.5)
 
     assert fwhm == pytest.approx(1.0)
+
+
+def test_fit_gaussian_profile_recovers_known_parameters() -> None:
+    coordinates_um = np.linspace(-2.0, 2.0, 41)
+    offset = 3.0
+    amplitude = 20.0
+    center_um = 0.15
+    sigma_um = 0.42
+    values = offset + amplitude * np.exp(-0.5 * ((coordinates_um - center_um) / sigma_um) ** 2)
+    profile = AxisProfile(
+        values=values,
+        coordinates_um=coordinates_um,
+        peak_index=int(np.argmax(values)),
+        um_per_px=0.1,
+    )
+
+    fit = fit_gaussian_profile(profile)
+
+    assert fit.success
+    assert fit.failure_reason == ""
+    assert fit.offset == pytest.approx(offset, rel=1e-5)
+    assert fit.amplitude == pytest.approx(amplitude, rel=1e-5)
+    assert fit.center_um == pytest.approx(center_um, abs=1e-5)
+    assert fit.sigma_um == pytest.approx(sigma_um, rel=1e-5)
+    assert fit.rmse == pytest.approx(0.0, abs=1e-6)
+    assert fit.r_squared == pytest.approx(1.0)
+
+
+def test_fit_gaussian_profile_reports_failure_for_flat_profile() -> None:
+    profile = AxisProfile(
+        values=np.ones(7),
+        coordinates_um=np.linspace(-0.3, 0.3, 7),
+        peak_index=3,
+        um_per_px=0.1,
+    )
+
+    fit = fit_gaussian_profile(profile)
+
+    assert not fit.success
+    assert "no positive intensity range" in fit.failure_reason
 
 
 def test_measure_roi_reports_line_profile_fwhm_and_intensity() -> None:

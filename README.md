@@ -1,23 +1,15 @@
 # psfbench
 
-`psfbench` is a small Python/uv project for measuring PSF bead data from 3D TIFF stacks.
+*End-to-end PSF bead analysis from 3D TIFF stacks: detect fluorescent beads, review centers, measure FWHM, and export summaries and plots.*
 
-The current implementation covers:
+`psfbench` is a Python/uv project that lets you:
 
-- load a 3D TIFF stack
-- convert the image to float
-- subtract a low-percentile background
-- lightly smooth with a 3D Gaussian filter
-- detect 3D local maxima
-- remove low-intensity, edge, and too-close candidates
-- prefer candidates near the XY center
-- keep about 20 bead candidates
-- open napari for manual point editing
-- save corrected `(z, y, x)` point coordinates to CSV
+- load a 3D TIFF stack or a ThorImage acquisition directory
+- detect fluorescent bead candidates automatically
+- review, add, move, or delete bead centers manually
 - crop bead-centered 3D ROIs
-- estimate Gaussian FWHM values for X, Y, and Z profiles
-- keep direct line-profile FWHM values as diagnostics
-- write per-bead measurements, condition summaries, QC flags, and summary plots
+- measure X, Y, and Z PSF FWHM values using Gaussian fits
+- export per-bead measurements, condition summaries, QC flags, and plots
 
 ## Setup
 
@@ -33,23 +25,28 @@ Run the CLI through uv:
 uv run psfbench --help
 ```
 
-## One-Shot Analysis
+## Usage
 
-For a single measurement dataset, run `psfbench` without a subcommand:
+### One-Shot Analysis
+
+For a single measurement dataset, run `psfbench`.
 
 ```bash
 uv run psfbench \
-  --input ../260616_psf/D64.7per_pow3.0per \
-  --output-dir outputs/D64.7per_pow3.0per \
-  --metadata-format thorimage
+  --input data/condition_001.tif \
+  --output-dir outputs/condition_001 \
+  --xy-um-per-px 0.11646 \
+  --z-um-per-px 0.2
 ```
 
-Metadata is not used unless explicitly requested. For ThorImage data, specify `--metadata-format thorimage`. After napari is closed, analysis continues automatically.
+Bead candidates will be automatically selected and shown in napari.  
+You can add, remove, or move them there.  
+After napari is closed, analysis continues automatically.
 
 The output directory contains:
 
 ```text
-outputs/D64.7per_pow3.0per/
+outputs/condition_001/
   points.csv
   rois/
     bead_0001.tif
@@ -59,83 +56,25 @@ outputs/D64.7per_pow3.0per/
   summary.csv
 ```
 
-To run without napari:
+Common optional arguments:
 
-```bash
-uv run psfbench \
-  --input ../260616_psf/D64.7per_pow3.0per \
-  --output-dir outputs/D64.7per_pow3.0per \
-  --metadata-format thorimage \
-  --no-gui
-```
+- `--no-gui`: skip napari and use automatically detected bead centers as-is
+- `--n-beads 20`: change the maximum number of bead candidates
+- `--threshold-percentile 99.8`: change the brightness threshold for candidate detection
+- `--center-fraction 0.6`: prefer candidates within the central fraction of the XY field
+- `--radius-z-um 3.0` and `--radius-xy-um 3.0`: change the ROI half-size used for FWHM measurement
+- `--metadata-format thorimage`: load voxel size metadata from ThorImage files instead of specifying voxel size manually
 
-## TIFF Stack Assumptions
+### Detect Command
 
-Input can be either:
-
-- a 3D TIFF stack file
-- a directory containing 2D TIFF planes
-
-Directories are read by sorting `*.tif`, `*.tiff`, `*.TIF`, and `*.TIFF` files and stacking them along Z. Non-TIFF files in the same directory are ignored.
-
-The resulting stack is expected to have shape:
-
-```text
-(z, y, x)
-```
-
-For the stated acquisition settings:
-
-- `xy_um_per_px = 119.26 / 1024 = 0.11646`
-- `z_um_per_px = 0.2`
-
-napari receives the image scale as:
-
-```python
-scale=(z_um_per_px, xy_um_per_px, xy_um_per_px)
-```
-
-The points layer also uses `(z, y, x)` pixel coordinate order.
-
-## Metadata
-
-Metadata is not used by default. Specify a metadata format explicitly if you want `psfbench` to fill missing voxel size values from acquisition metadata.
-
-ThorImage directory input is supported:
-
-```bash
-uv run psfbench detect \
-  --input ../260616_psf/D100per_pow5.18per \
-  --output outputs/D100per_pow5.18per_points.csv \
-  --metadata-format thorimage
-```
-
-For ThorImage, `psfbench` expects `Experiment.xml` in the input directory and checks that the XML root is `ThorImageExperiment`.
-
-The following fields are used:
-
-- `ZStage.stepSizeUM` for `z_um_per_px`
-- `LSM.widthUM / LSM.pixelX` for `xy_um_per_px`
-- `LSM.pixelSizeUM` as a fallback for `xy_um_per_px`
-
-CLI values always take precedence over metadata values. For example, this uses the CLI value for XY and ThorImage metadata for Z:
-
-```bash
-uv run psfbench detect \
-  --input ../260616_psf/D100per_pow5.18per \
-  --output outputs/D100per_pow5.18per_points.csv \
-  --metadata-format thorimage \
-  --xy-um-per-px 0.11646
-```
-
-## Detect Command
+Use individual subcommands when you want to inspect or rerun only part of the pipeline.
 
 Detect bead candidates, open napari for correction, and save the corrected points:
 
 ```bash
 uv run psfbench detect \
-  --input data/beads_filling_80 \
-  --output outputs/beads_filling_80_points.csv \
+  --input data/condition_001 \
+  --output outputs/condition_001_points.csv \
   --xy-um-per-px 0.11646 \
   --z-um-per-px 0.2 \
   --n-beads 20 \
@@ -143,24 +82,15 @@ uv run psfbench detect \
   --center-fraction 0.6
 ```
 
-To detect and save without opening napari:
+Add `--no-gui` to save automatically detected points without opening napari.
 
-```bash
-uv run psfbench detect \
-  --input data/beads_filling_80 \
-  --output outputs/beads_filling_80_points.csv \
-  --xy-um-per-px 0.11646 \
-  --z-um-per-px 0.2 \
-  --no-gui
-```
-
-## Batch Detect Command
+### Batch Detect Command
 
 Run detection for every condition directory immediately under an input root:
 
 ```bash
 uv run psfbench batch-detect \
-  --input-root ../260616_psf \
+  --input-root data \
   --output-dir outputs \
   --metadata-format thorimage \
   --n-beads 20
@@ -169,35 +99,35 @@ uv run psfbench batch-detect \
 This writes one CSV per condition:
 
 ```text
-outputs/D40per_pow2.24per_points.csv
-outputs/D60per_pow1.98per_points.csv
+outputs/condition_001_points.csv
+outputs/condition_002_points.csv
 ...
 ```
 
 `batch-detect` defaults to `--no-gui`. To open napari for each stack in sequence, add `--gui`.
 
-## Edit Command
+### Edit Command
 
 Load an existing points CSV, correct it in napari, and save a new CSV:
 
 ```bash
 uv run psfbench edit \
-  --input data/beads_filling_80 \
-  --points outputs/beads_filling_80_points.csv \
-  --output outputs/beads_filling_80_points_corrected.csv \
+  --input data/condition_001 \
+  --points outputs/condition_001_points.csv \
+  --output outputs/condition_001_points_corrected.csv \
   --xy-um-per-px 0.11646 \
   --z-um-per-px 0.2
 ```
 
-## Crop ROIs Command
+### Crop ROIs Command
 
 After point correction, crop one 3D ROI around each bead center:
 
 ```bash
 uv run psfbench crop-rois \
-  --input ../260616_psf/D100per_pow5.18per \
-  --points outputs/D100per_pow5.18per_points_corrected.csv \
-  --output-dir outputs/D100per_pow5.18per_rois \
+  --input data/condition_001 \
+  --points outputs/condition_001_points_corrected.csv \
+  --output-dir outputs/condition_001_rois \
   --metadata-format thorimage \
   --radius-z-um 3.0 \
   --radius-xy-um 3.0
@@ -206,21 +136,21 @@ uv run psfbench crop-rois \
 This writes ROI TIFF files and a manifest:
 
 ```text
-outputs/D100per_pow5.18per_rois/bead_0001.tif
-outputs/D100per_pow5.18per_rois/bead_0002.tif
-outputs/D100per_pow5.18per_rois/roi_manifest.csv
+outputs/condition_001_rois/bead_0001.tif
+outputs/condition_001_rois/bead_0002.tif
+outputs/condition_001_rois/roi_manifest.csv
 ```
 
 ROIs that would extend beyond the stack bounds are skipped and recorded in `roi_manifest.csv`.
 
-## Measure ROIs Command
+### Measure ROIs Command
 
 Measure each saved ROI with Gaussian FWHM estimates and line-profile diagnostic widths:
 
 ```bash
 uv run psfbench measure-rois \
-  --roi-dir outputs/D100per_pow5.18per_rois \
-  --output outputs/D100per_pow5.18per_measurements.csv
+  --roi-dir outputs/condition_001_rois \
+  --output outputs/condition_001_measurements.csv
 ```
 
 The measurement subtracts a low-percentile ROI background, finds the ROI peak, extracts X/Y/Z line profiles through that peak, fits each profile with a 1D Gaussian, and computes FWHM from the fitted sigma. It also reports direct line-profile FWHM values by linear interpolation at half maximum as diagnostic columns.
@@ -246,14 +176,14 @@ The output CSV includes:
 
 QC columns are diagnostic flags only. They do not exclude beads from the output CSV.
 
-## Aggregate Measurements Command
+### Aggregate Measurements Command
 
 Summarize multiple measurement CSV files by condition:
 
 ```bash
 uv run psfbench aggregate-measurements \
   --input-dir outputs \
-  --output outputs/psf_summary.csv
+  --output outputs/summary.csv
 ```
 
 By default, the command reads files matching `*_measurements.csv`. The condition name is inferred from the filename by removing `_measurements`.
@@ -265,7 +195,7 @@ You can optionally join experiment-level condition metadata:
 ```bash
 uv run psfbench aggregate-measurements \
   --input-dir outputs \
-  --output outputs/psf_summary.csv \
+  --output outputs/summary.csv \
   --condition-metadata condition_metadata.csv
 ```
 
@@ -273,18 +203,18 @@ The metadata CSV must include a `condition` column. Other columns are copied int
 
 ```csv
 condition,filling_rate,power_percent
-D40per_pow2.24per,40,2.24
-D60per_pow1.98per,60,1.98
-D64.7per_pow3.0per,64.7,3.0
+condition_001,40,2.0
+condition_002,80,3.0
+condition_003,100,5.0
 ```
 
-## Plot Summary Command
+### Plot Summary Command
 
 Plot any columns from a summary CSV:
 
 ```bash
 uv run psfbench plot-summary \
-  --summary outputs/psf_summary.csv \
+  --summary outputs/summary.csv \
   --x filling_rate \
   --y FWHM_Z_um_mean \
   --yerr FWHM_Z_um_sem \
@@ -295,7 +225,7 @@ Without condition metadata, plot by condition label:
 
 ```bash
 uv run psfbench plot-summary \
-  --summary outputs/psf_summary.csv \
+  --summary outputs/summary.csv \
   --x condition \
   --y FWHM_Z_um_mean \
   --yerr FWHM_Z_um_sem \
@@ -304,19 +234,51 @@ uv run psfbench plot-summary \
 
 The output extension controls the file type, for example `.png`, `.pdf`, or `.svg`.
 
-## Editing Points In Napari
+## Details
 
-When napari opens, the TIFF stack is shown together with a `bead candidates` points layer.
+### Input Stacks And Coordinates
 
-Use the normal napari points-layer tools to:
+`--input` can be either:
 
-- select and delete incorrect points
-- add missed bead centers
-- drag existing points to better center positions
+- a 3D TIFF stack file
+- a directory containing 2D TIFF planes
 
-Close the napari window when correction is finished. The CLI then writes the final points to the requested CSV path.
+Directories are read by sorting `*.tif`, `*.tiff`, `*.TIF`, and `*.TIFF` files and stacking them along Z. Non-TIFF files in the same directory are ignored.
 
-## Output CSV
+The resulting stack is expected to have shape:
+
+```text
+(z, y, x)
+```
+
+For the stated acquisition settings:
+
+- `xy_um_per_px = 119.26 / 1024 = 0.11646`
+- `z_um_per_px = 0.2`
+
+napari receives the image scale as:
+
+```python
+scale=(z_um_per_px, xy_um_per_px, xy_um_per_px)
+```
+
+The points layer also uses `(z, y, x)` pixel coordinate order.
+
+### Metadata
+
+Metadata is not used by default. Specify a metadata format explicitly if you want `psfbench` to fill missing voxel size values from acquisition metadata.
+
+For ThorImage, `psfbench` expects `Experiment.xml` in the input directory and checks that the XML root is `ThorImageExperiment`.
+
+The following fields are used:
+
+- `ZStage.stepSizeUM` for `z_um_per_px`
+- `LSM.widthUM / LSM.pixelX` for `xy_um_per_px`
+- `LSM.pixelSizeUM` as a fallback for `xy_um_per_px`
+
+CLI values always take precedence over metadata values. For example, `--xy-um-per-px 0.11646 --metadata-format thorimage` uses the CLI value for XY and ThorImage metadata for Z.
+
+### Point Coordinate CSV
 
 The output CSV contains pixel coordinates and physical coordinates:
 
@@ -331,7 +293,7 @@ Coordinate meanings:
 - `y_um`: `y * xy_um_per_px`
 - `x_um`: `x * xy_um_per_px`
 
-## Detection Details
+### Detection Details
 
 Default detection parameters:
 
@@ -346,15 +308,3 @@ Default detection parameters:
 The local maximum filter size is computed from the physical minimum distance and voxel size.
 
 Candidate ranking intentionally prefers beads near the XY center by default. This matches the current use case of comparing near-axis PSF measurements across filling-rate conditions. If off-axis PSF variation is the target, adjust `--center-fraction` or use the lower-level commands to review a broader set of beads.
-
-## Measurement Limitations
-
-Current measurement choices are deliberately conservative:
-
-- bead centers are taken from the integer-pixel ROI peak after background subtraction
-- each FWHM is measured from a 1D axis profile through that peak
-- ROI background is a single low-percentile scalar
-- Gaussian fits are unweighted
-- `integrated_intensity` is the background-subtracted sum over the whole ROI
-
-These choices are simple, reproducible, and useful for relative comparisons. Future versions may add sub-voxel center refinement, averaged profile extraction, local background modeling, weighted fitting, or full 3D Gaussian fitting.

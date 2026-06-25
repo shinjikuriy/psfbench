@@ -2,6 +2,8 @@
 
 *End-to-end PSF bead analysis from 3D TIFF stacks: detect fluorescent beads, review centers, measure FWHM, and export summaries and plots.*
 
+## About
+
 `psfbench` is a Python/uv project that lets you:
 
 - load a 3D TIFF stack or a ThorImage acquisition directory
@@ -10,6 +12,8 @@
 - crop bead-centered 3D ROIs
 - measure X, Y, and Z PSF FWHM values using Gaussian fits
 - export per-bead measurements, condition summaries, QC flags, and plots
+
+Requires Python 3.10-3.13.
 
 ## Setup
 

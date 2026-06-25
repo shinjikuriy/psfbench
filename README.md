@@ -63,122 +63,36 @@ Common optional arguments:
 - `--threshold-percentile 99.8`: change the brightness threshold for candidate detection
 - `--center-fraction 0.6`: prefer candidates within the central fraction of the XY field
 - `--radius-z-um 3.0` and `--radius-xy-um 3.0`: change the ROI half-size used for FWHM measurement
-- `--metadata-format thorimage`: load voxel size metadata from ThorImage files instead of specifying voxel size manually
+- `--metadata-format thorimage`: load voxel size metadata from ThorImage files
 
-### Detect Command
+Each step of the single-dataset pipeline can also be run independently. See [Pipeline subcommands](docs/pipeline-subcommands.md).
 
-Use individual subcommands when you want to inspect or rerun only part of the pipeline.
+### Use Vendor Metadata
 
-Detect bead candidates, open napari for correction, and save the corrected points:
+By default, you must specify voxel size parameters such as `--xy-um-per-px` and `--z-um-per-px`. `psfbench` can use acquisition metadata from supported vendor software when you pass `--metadata-format`.
+
+Currently, only `thorimage` is supported:
 
 ```bash
-uv run psfbench detect \
+uv run psfbench \
   --input data/condition_001 \
-  --output outputs/condition_001_points.csv \
-  --xy-um-per-px 0.11646 \
-  --z-um-per-px 0.2 \
-  --n-beads 20 \
-  --threshold-percentile 99.8 \
-  --center-fraction 0.6
+  --output-dir outputs/condition_001 \
+  --metadata-format thorimage
 ```
 
-Add `--no-gui` to save automatically detected points without opening napari.
+For `--metadata-format thorimage`, `psfbench` expects `Experiment.xml` in the input directory and checks that the XML root is `ThorImageExperiment`.
 
-### Batch Detect Command
+The following fields are used:
 
-Run detection for every condition directory immediately under an input root:
+- `ZStage.stepSizeUM` for `z_um_per_px`
+- `LSM.widthUM / LSM.pixelX` for `xy_um_per_px`
+- `LSM.pixelSizeUM` as a fallback for `xy_um_per_px`
 
-```bash
-uv run psfbench batch-detect \
-  --input-root data \
-  --output-dir outputs \
-  --metadata-format thorimage \
-  --n-beads 20
-```
+CLI values always take precedence over metadata values. For example, `--xy-um-per-px 0.11646 --metadata-format thorimage` uses the CLI value for XY and ThorImage metadata for Z.
 
-This writes one CSV per condition:
+### Aggregate Measurements
 
-```text
-outputs/condition_001_points.csv
-outputs/condition_002_points.csv
-...
-```
-
-`batch-detect` defaults to `--no-gui`. To open napari for each stack in sequence, add `--gui`.
-
-### Edit Command
-
-Load an existing points CSV, correct it in napari, and save a new CSV:
-
-```bash
-uv run psfbench edit \
-  --input data/condition_001 \
-  --points outputs/condition_001_points.csv \
-  --output outputs/condition_001_points_corrected.csv \
-  --xy-um-per-px 0.11646 \
-  --z-um-per-px 0.2
-```
-
-### Crop ROIs Command
-
-After point correction, crop one 3D ROI around each bead center:
-
-```bash
-uv run psfbench crop-rois \
-  --input data/condition_001 \
-  --points outputs/condition_001_points_corrected.csv \
-  --output-dir outputs/condition_001_rois \
-  --metadata-format thorimage \
-  --radius-z-um 3.0 \
-  --radius-xy-um 3.0
-```
-
-This writes ROI TIFF files and a manifest:
-
-```text
-outputs/condition_001_rois/bead_0001.tif
-outputs/condition_001_rois/bead_0002.tif
-outputs/condition_001_rois/roi_manifest.csv
-```
-
-ROIs that would extend beyond the stack bounds are skipped and recorded in `roi_manifest.csv`.
-
-### Measure ROIs Command
-
-Measure each saved ROI with Gaussian FWHM estimates and line-profile diagnostic widths:
-
-```bash
-uv run psfbench measure-rois \
-  --roi-dir outputs/condition_001_rois \
-  --output outputs/condition_001_measurements.csv
-```
-
-The measurement subtracts a low-percentile ROI background, finds the ROI peak, extracts X/Y/Z line profiles through that peak, fits each profile with a 1D Gaussian, and computes FWHM from the fitted sigma. It also reports direct line-profile FWHM values by linear interpolation at half maximum as diagnostic columns.
-
-This is intentionally a 1D axis-profile measurement. It is suitable for consistent condition-to-condition comparison of bead PSFs, especially near the optical axis. It does not currently perform sub-voxel center estimation or full 3D Gaussian fitting. Those approaches may improve absolute accuracy, but they also add assumptions and fitting failure modes. The current implementation keeps the simpler 1D Gaussian FWHM as the primary metric and exposes QC columns so suspicious beads can be reviewed.
-
-The output CSV includes:
-
-- `FWHM_X_um`
-- `FWHM_Y_um`
-- `FWHM_Z_um`
-- `FWHM_XY_mean_um`
-- `FWHM_X_over_Y`
-- `FWHM_X_line_um`
-- `FWHM_Y_line_um`
-- `FWHM_Z_line_um`
-- `FWHM_XY_mean_line_um`
-- `FWHM_X_over_Y_line`
-- Gaussian fit status and quality columns such as `gaussian_x_success`, `gaussian_x_sigma_um`, and `gaussian_x_r_squared`
-- QC columns such as `qc_any_warning`, `qc_fit_failed`, `qc_peak_near_roi_edge`, `qc_low_r_squared`, and `line_gaussian_rel_diff_x`
-- `peak_intensity`
-- `integrated_intensity`
-
-QC columns are diagnostic flags only. They do not exclude beads from the output CSV.
-
-### Aggregate Measurements Command
-
-Summarize multiple measurement CSV files by condition:
+After measuring multiple conditions, summarize per-bead measurement CSV files by condition:
 
 ```bash
 uv run psfbench aggregate-measurements \
@@ -186,11 +100,7 @@ uv run psfbench aggregate-measurements \
   --output outputs/summary.csv
 ```
 
-By default, the command reads files matching `*_measurements.csv`. The condition name is inferred from the filename by removing `_measurements`.
-
-The summary includes count, mean, SD, and SEM for each measurement column.
-
-You can optionally join experiment-level condition metadata:
+The summary includes count, mean, SD, and SEM for each measurement column. You can optionally join condition-level metadata:
 
 ```bash
 uv run psfbench aggregate-measurements \
@@ -199,7 +109,7 @@ uv run psfbench aggregate-measurements \
   --condition-metadata condition_metadata.csv
 ```
 
-The metadata CSV must include a `condition` column. Other columns are copied into the summary:
+The metadata CSV must include a `condition` column:
 
 ```csv
 condition,filling_rate,power_percent
@@ -208,9 +118,9 @@ condition_002,80,3.0
 condition_003,100,5.0
 ```
 
-### Plot Summary Command
+### Plot Summary
 
-Plot any columns from a summary CSV:
+Plot columns from a summary CSV:
 
 ```bash
 uv run psfbench plot-summary \
@@ -219,17 +129,6 @@ uv run psfbench plot-summary \
   --y FWHM_Z_um_mean \
   --yerr FWHM_Z_um_sem \
   --output outputs/fwhm_z_vs_filling_rate.png
-```
-
-Without condition metadata, plot by condition label:
-
-```bash
-uv run psfbench plot-summary \
-  --summary outputs/summary.csv \
-  --x condition \
-  --y FWHM_Z_um_mean \
-  --yerr FWHM_Z_um_sem \
-  --output outputs/fwhm_z_by_condition.png
 ```
 
 The output extension controls the file type, for example `.png`, `.pdf`, or `.svg`.
@@ -263,20 +162,6 @@ scale=(z_um_per_px, xy_um_per_px, xy_um_per_px)
 ```
 
 The points layer also uses `(z, y, x)` pixel coordinate order.
-
-### Metadata
-
-Metadata is not used by default. Specify a metadata format explicitly if you want `psfbench` to fill missing voxel size values from acquisition metadata.
-
-For ThorImage, `psfbench` expects `Experiment.xml` in the input directory and checks that the XML root is `ThorImageExperiment`.
-
-The following fields are used:
-
-- `ZStage.stepSizeUM` for `z_um_per_px`
-- `LSM.widthUM / LSM.pixelX` for `xy_um_per_px`
-- `LSM.pixelSizeUM` as a fallback for `xy_um_per_px`
-
-CLI values always take precedence over metadata values. For example, `--xy-um-per-px 0.11646 --metadata-format thorimage` uses the CLI value for XY and ThorImage metadata for Z.
 
 ### Point Coordinate CSV
 

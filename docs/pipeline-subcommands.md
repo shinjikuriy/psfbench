@@ -78,6 +78,9 @@ outputs/condition_001_rois/roi_manifest.csv
 
 ROIs that would extend beyond the stack bounds are skipped and recorded in `roi_manifest.csv`.
 
+The command stops if `--output-dir` is not empty. Add `--overwrite` to remove existing
+ROI TIFF files and `roi_manifest.csv` before writing the new results. Other files are preserved.
+
 ## Measure ROIs
 
 Measure each saved ROI with Gaussian FWHM estimates and line-profile diagnostic widths:

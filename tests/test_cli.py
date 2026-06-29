@@ -159,6 +159,74 @@ def test_crop_rois_command_writes_roi_outputs(tmp_path: Path) -> None:
     assert not bool(manifest.loc[0, "skipped"])
 
 
+def test_crop_rois_command_rejects_nonempty_output_dir(tmp_path: Path) -> None:
+    input_dir = tmp_path / "thorimage_stack"
+    input_dir.mkdir()
+    write_tiny_thorimage_stack(input_dir, peak_yx=(40, 40))
+    points_csv = tmp_path / "points.csv"
+    points_csv.write_text("z,y,x,z_um,y_um,x_um\n20,40,40,10,8,8\n")
+    output_dir = tmp_path / "rois"
+    output_dir.mkdir()
+    old_roi = output_dir / "bead_9999.tif"
+    old_roi.write_bytes(b"old ROI")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "crop-rois",
+            "--input",
+            str(input_dir),
+            "--points",
+            str(points_csv),
+            "--output-dir",
+            str(output_dir),
+            "--metadata-format",
+            "thorimage",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "ROI output directory is not empty" in result.output
+    assert "--overwrite" in result.output
+    assert old_roi.read_bytes() == b"old ROI"
+
+
+def test_crop_rois_command_overwrite_removes_old_roi_outputs(tmp_path: Path) -> None:
+    input_dir = tmp_path / "thorimage_stack"
+    input_dir.mkdir()
+    write_tiny_thorimage_stack(input_dir, peak_yx=(40, 40))
+    points_csv = tmp_path / "points.csv"
+    points_csv.write_text("z,y,x,z_um,y_um,x_um\n20,40,40,10,8,8\n")
+    output_dir = tmp_path / "rois"
+    output_dir.mkdir()
+    (output_dir / "old_prefix_9999.tiff").write_bytes(b"old ROI")
+    (output_dir / "roi_manifest.csv").write_text("old manifest\n")
+    note = output_dir / "notes.txt"
+    note.write_text("keep me")
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "crop-rois",
+            "--input",
+            str(input_dir),
+            "--points",
+            str(points_csv),
+            "--output-dir",
+            str(output_dir),
+            "--metadata-format",
+            "thorimage",
+            "--overwrite",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert not (output_dir / "old_prefix_9999.tiff").exists()
+    assert (output_dir / "bead_0001.tif").exists()
+    assert len(pd.read_csv(output_dir / "roi_manifest.csv")) == 1
+    assert note.read_text() == "keep me"
+
+
 def test_measure_rois_command_writes_measurement_csv(tmp_path: Path) -> None:
     roi_dir = tmp_path / "rois"
     roi_dir.mkdir()

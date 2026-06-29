@@ -31,6 +31,27 @@ class RoiResult:
     skip_reason: str | None = None
 
 
+def prepare_roi_output_dir(output_dir: str | Path, *, overwrite: bool = False) -> Path:
+    output_dir = Path(output_dir)
+    if output_dir.exists() and not output_dir.is_dir():
+        raise NotADirectoryError(f"ROI output path is not a directory: {output_dir}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    existing_entries = list(output_dir.iterdir())
+    if existing_entries and not overwrite:
+        raise FileExistsError(
+            f"ROI output directory is not empty: {output_dir}. "
+            "Use --overwrite to replace existing ROI outputs."
+        )
+
+    if overwrite:
+        for path in existing_entries:
+            if path.is_file() and (path.name == "roi_manifest.csv" or path.suffix.lower() in {".tif", ".tiff"}):
+                path.unlink()
+
+    return output_dir
+
+
 def crop_roi(
     stack: np.ndarray,
     center_zyx: np.ndarray,

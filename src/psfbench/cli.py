@@ -11,7 +11,7 @@ from psfbench.io import read_tiff_stack
 from psfbench.measurement import measure_rois_from_manifest
 from psfbench.metadata import MetadataFormat, VoxelSize, resolve_voxel_size
 from psfbench.plotting import plot_summary
-from psfbench.roi import save_rois
+from psfbench.roi import prepare_roi_output_dir, save_rois
 from psfbench.summary import summarize_measurement_files, summarize_measurements
 
 
@@ -373,6 +373,7 @@ def crop_rois(
     radius_z_um: float = typer.Option(3.0, help="Half-size of each ROI in Z, in micrometers."),
     radius_xy_um: float = typer.Option(3.0, help="Half-size of each ROI in X and Y, in micrometers."),
     prefix: str = typer.Option("bead", help="Prefix for ROI TIFF filenames."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace existing ROI TIFF files and manifest."),
 ) -> None:
     voxel_size = _resolve_voxel_size_or_exit(
         input_path=input,
@@ -382,6 +383,11 @@ def crop_rois(
     )
     stack = read_tiff_stack(input)
     point_array = read_points_csv(points)
+    try:
+        prepare_roi_output_dir(output_dir, overwrite=overwrite)
+    except (FileExistsError, NotADirectoryError) as exc:
+        raise typer.BadParameter(str(exc), param_hint="--output-dir") from exc
+
     results = save_rois(
         stack,
         point_array,

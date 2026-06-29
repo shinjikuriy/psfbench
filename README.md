@@ -43,8 +43,9 @@ uv run psfbench \
   --z-um-per-px 0.2
 ```
 
-Bead candidates will be automatically selected and shown in napari.  
-You can add, remove, or move them there.  
+Bead candidates will be automatically selected and shown in napari. You can add, remove,
+or move them there. The points layer name shows the current count, and each point label
+matches its bead index in the output files.
 After napari is closed, analysis continues automatically.
 
 The output directory contains:

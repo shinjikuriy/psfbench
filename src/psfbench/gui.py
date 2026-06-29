@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Iterator
+from typing import Protocol
 
 import numpy as np
 
@@ -16,6 +17,12 @@ _MACOS_QT_KEYBOARD_WARNING_PARTS = (
     "Carbon",
     "virtual key",
 )
+
+
+class _AnnotatablePointsLayer(Protocol):
+    data: np.ndarray
+    name: str
+    features: object
 
 
 def edit_points_with_napari(
@@ -35,15 +42,37 @@ def edit_points_with_napari(
     viewer.add_image(stack, name="3D TIFF stack", scale=scale)
     points_layer = viewer.add_points(
         points,
-        name="bead candidates",
+        name=_points_layer_name(len(points)),
         scale=scale,
         size=8,
         face_color="magenta",
+        features={"bead_index": np.arange(1, len(points) + 1)},
+        text={
+            "string": "{bead_index}",
+            "color": "white",
+            "size": 12,
+            "translation": [0, 6, 6],
+        },
         ndim=3,
     )
+
+    def refresh_point_annotations(event: object | None = None) -> None:
+        _update_point_annotations(points_layer)
+
+    points_layer.events.data.connect(refresh_point_annotations)
     with suppress_macos_qt_keyboard_warnings():
         napari.run()
     return ensure_zyx_points(points_layer.data)
+
+
+def _update_point_annotations(points_layer: _AnnotatablePointsLayer) -> None:
+    point_count = len(points_layer.data)
+    points_layer.name = _points_layer_name(point_count)
+    points_layer.features = {"bead_index": np.arange(1, point_count + 1)}
+
+
+def _points_layer_name(point_count: int) -> str:
+    return f"bead candidates ({point_count})"
 
 
 @contextmanager
